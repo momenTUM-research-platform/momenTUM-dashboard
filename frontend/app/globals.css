@@ -1,0 +1,81 @@
+/* frontend/app/globals.css */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f7f7f7;
+}
+
+.container {
+  max-width: 600px;
+  margin: 2rem auto;
+  background: #fff;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+input {
+  width: 100%;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+button {
+  width: 100%;
+  padding: 0.75rem;
+  margin-top: 1rem;
+  background-color: #0070f3;
+  border: none;
+  color: white;
+  font-weight: bold;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #005bb5;
+}
+
+.error {
+  color: red;
+  text-align: center;
+}
+
+.password-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input__field {
+  width: 100%;
+  padding: 0.5rem 2.5rem 0.5rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.password-input__toggle {
+  all: unset;
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-25%); 
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.password-input__toggle:hover {
+  background: transparent;
+  color: #2F80ED;
+}
