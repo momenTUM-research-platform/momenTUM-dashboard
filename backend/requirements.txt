@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==3.2.0
+SQLAlchemy
+asyncpg
+psycopg2-binary
+alembic
+dotenv
+pydantic
+sqlmodel
+pydantic_sqlalchemy
