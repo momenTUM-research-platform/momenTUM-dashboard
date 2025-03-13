@@ -12,3 +12,4 @@ dotenv
 pydantic
 sqlmodel
 pydantic_sqlalchemy
+pymongo
