@@ -82,7 +82,7 @@ export default function Header() {
             fontSize: "1.1rem",
           }}
         >
-          Dashboard
+          MomenTUM Dashboard
         </Link>
       </nav>
       <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>

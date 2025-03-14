@@ -9,11 +9,13 @@ from auth import router as auth_router, oauth2_scheme, SECRET_KEY, ALGORITHM, pw
 from database import get_db
 from crud import get_user_by_username
 from mock_studies import mock_studies
-from studies import router as studies_router
+from studies_test import router as studies_test_router
+from studies_responses_grouped import router as responses_grouped
 
 app = FastAPI()
 app.include_router(auth_router, prefix="/api")
-app.include_router(studies_router, prefix="/api")
+app.include_router(studies_test_router, prefix="/api")
+app.include_router(responses_grouped, prefix="/api")
 
 def admin_required(token: str = Depends(oauth2_scheme)):
     try:

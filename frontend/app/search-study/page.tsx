@@ -1,19 +1,32 @@
-// frontend/app/search-study/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../context/AuthContext";
 
-interface StudyResponse {
+interface GroupedResponses {
+  [userId: string]: any[];
+}
+
+interface StudyData {
   study_id: string;
-  responses: any[];
-  // extend fields as needed
+  grouped_responses: GroupedResponses;
 }
 
 export default function SearchStudyPage() {
   const [studyId, setStudyId] = useState("");
-  const [data, setData] = useState<StudyResponse | null>(null);
+  const [data, setData] = useState<StudyData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const router = useRouter();
+
+  // Protect the page: if no authenticated user is found, redirect to /login.
+  useEffect(() => {
+    if (!user || !user.username) {
+      router.push("/login");
+    }
+  }, [user, router]);
 
   const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -21,7 +34,7 @@ export default function SearchStudyPage() {
     setError(null);
     setData(null);
     try {
-      const res = await fetch(`/api/${studyId}`);
+      const res = await fetch(`/api/studies_responses_grouped/${studyId}`);
       if (!res.ok) {
         const errData = await res.json();
         setError(errData.detail || "Error fetching study data");
@@ -78,9 +91,20 @@ export default function SearchStudyPage() {
       {data && (
         <div>
           <h2>Study ID: {data.study_id}</h2>
-          <pre style={{ background: "#f4f4f4", padding: "1rem", borderRadius: "4px" }}>
-            {JSON.stringify(data, null, 2)}
-          </pre>
+          {Object.keys(data.grouped_responses).map((userId) => (
+            <div key={userId} style={{ marginBottom: "2rem" }}>
+              <h3>User ID: {userId}</h3>
+              <pre
+                style={{
+                  background: "#f4f4f4",
+                  padding: "1rem",
+                  borderRadius: "4px",
+                }}
+              >
+                {JSON.stringify(data.grouped_responses[userId], null, 2)}
+              </pre>
+            </div>
+          ))}
         </div>
       )}
     </div>

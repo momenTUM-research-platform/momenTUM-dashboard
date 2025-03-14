@@ -14,40 +14,53 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ username, password }),
-    });
-    if (!res.ok) {
-      const errData = await res.json();
-      setError(errData.detail || "Login failed");
-      return;
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ username, password }),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        setError(errData.detail || "Login failed");
+        return;
+      }
+      const data = await res.json();
+      // Save the token to localStorage
+      localStorage.setItem("token", data.access_token);
+      // Refresh the AuthContext (if refreshUser returns a promise, await it)
+      await refreshUser();
+      // Redirect to the dashboard (or default page)
+      router.push("/");
+    } catch (err) {
+      setError("An unexpected error occurred.");
     }
-    const data = await res.json();
-    localStorage.setItem("token", data.access_token);
-    refreshUser();
-    router.push("/");
   };
 
   return (
     <div className="container">
       <h1>Login</h1>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="form-login">
         <div>
-          <label>Username</label>
+          <label htmlFor="username">Username</label>
           <input
+            id="username"
+            name="username" // Required for browser autofill
             type="text"
             value={username}
+            autoComplete="username"
             placeholder="Enter username"
             onChange={(e) => setUsername(e.target.value)}
             required
           />
         </div>
         <div style={{ marginTop: "1rem" }}>
-          <label>Password</label>
+          <label htmlFor="password">Password</label>
           <PasswordInput
+            id="password"
+            name="password" // Required for browser autofill
             value={password}
+            autoComplete="current-password"
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter password"
             required
