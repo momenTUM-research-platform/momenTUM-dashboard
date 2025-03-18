@@ -1,163 +1,149 @@
+// app/retrieve-study/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "../context/AuthContext";
+import { useState } from "react";
+import TableView, { StudyData } from "../components/TableView";
+import TimelineView from "../components/TimelineView";
 
-interface GroupedBySection {
-  section_name: string;
-  qa: Record<string, any>;
-  raw_responses?: any[];
-}
-
-interface GroupedByModule {
-  module_name: string;
-  sections: {
-    [sectionIndex: string]: GroupedBySection;
-  };
-}
-
-interface GroupedResponses {
-  [userId: string]: {
-    [moduleId: string]: GroupedByModule | {
-      module_name: string;
-      raw_responses: any[];
-    };
-  };
-}
-
-interface StudyResponse {
-  study_id: string;
-  grouped_responses: GroupedResponses;
-}
-
+/**
+ * RetrieveStudyPage fetches and displays grouped study responses.
+ * The page provides filtering by user ID, pagination, and view switching (Table, Timeline, JSON Debug).
+ */
 export default function RetrieveStudyPage() {
   const [studyId, setStudyId] = useState("");
-  const [data, setData] = useState<StudyResponse | null>(null);
+  const [data, setData] = useState<StudyData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
-  const router = useRouter();
+  const [view, setView] = useState<"table" | "timeline" | "json">("table");
 
-  // Protect the route: if user is not logged in, redirect to login.
-  useEffect(() => {
-    if (!user || !user.username) {
-      router.push("/login");
-    }
-  }, [user, router]);
+  // Pagination and filtering state.
+  const [filterUser, setFilterUser] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  /**
+   * Fetch grouped study responses based on the study ID.
+   */
+  const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setData(null);
+    setCurrentPage(1);
     try {
       const res = await fetch(`/api/studies_responses_grouped/${studyId}`);
       if (!res.ok) {
         const errData = await res.json();
-        setError(errData.detail || "Error fetching study responses");
+        setError(errData.detail || "Error fetching study data");
       } else {
         const jsonData = await res.json();
         setData(jsonData);
       }
     } catch (err) {
-      setError("Error fetching study responses");
+      setError("Error fetching study data");
     } finally {
       setLoading(false);
     }
   };
 
+  // Filter and paginate the grouped responses.
+  const getPaginatedData = (): StudyData | null => {
+    if (!data) return null;
+    const allUserIds = Object.keys(data.grouped_responses);
+    const filteredUserIds = filterUser
+      ? allUserIds.filter((userId) => userId.toLowerCase().includes(filterUser.toLowerCase()))
+      : allUserIds;
+    const totalUsers = filteredUserIds.length;
+    const totalPages = Math.ceil(totalUsers / pageSize);
+    const current = Math.min(currentPage, totalPages) || 1;
+    const paginatedUserIds = filteredUserIds.slice((current - 1) * pageSize, current * pageSize);
+    const paginatedGroupedResponses: { [userId: string]: any } = {};
+    paginatedUserIds.forEach((userId) => {
+      paginatedGroupedResponses[userId] = data.grouped_responses[userId];
+    });
+    return { study_id: data.study_id, grouped_responses: paginatedGroupedResponses };
+  };
+
+  const paginatedData = getPaginatedData();
+  const totalUsers = data
+    ? Object.keys(data.grouped_responses).filter((userId) =>
+        filterUser ? userId.toLowerCase().includes(filterUser.toLowerCase()) : true
+      ).length
+    : 0;
+  const totalPages = Math.ceil(totalUsers / pageSize);
+
   return (
-    <div style={{ padding: "2rem", maxWidth: "800px", margin: "0 auto" }}>
+    <div className="container">
       <h1>Retrieve Study Responses</h1>
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="studyId">Enter Study ID:</label>
+      <form onSubmit={handleSearch}>
         <input
-          id="studyId"
           type="text"
           value={studyId}
           onChange={(e) => setStudyId(e.target.value)}
-          placeholder="e.g., test_ecosleep_ema"
-          style={{
-            width: "100%",
-            padding: "0.5rem",
-            marginTop: "0.5rem",
-            marginBottom: "1rem",
-            border: "1px solid #ccc",
-            borderRadius: "4px",
-          }}
+          placeholder="Enter Study ID (e.g., test_ecosleep_ema)"
           required
+          className="input-field"
         />
-        <button
-          type="submit"
-          style={{
-            width: "100%",
-            padding: "0.75rem",
-            backgroundColor: "#2F80ED",
-            border: "none",
-            color: "white",
-            fontSize: "1rem",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          Retrieve
+        <button type="submit" className="button">
+          Search
         </button>
       </form>
       {loading && <p>Loading study responses...</p>}
-      {error && <p style={{ color: "red" }}>Error: {error}</p>}
+      {error && <p className="error">Error: {error}</p>}
       {data && (
         <div>
-          <h2>Study ID: {data.study_id}</h2>
-          {Object.keys(data.grouped_responses).map((userId) => (
-            <div key={userId} style={{ marginBottom: "2rem" }}>
-              <h3>User ID: {userId}</h3>
-              {Object.keys(data.grouped_responses[userId]).map((moduleId) => {
-                const moduleData = data.grouped_responses[userId][moduleId];
-                if ("raw_responses" in moduleData) {
-                  return (
-                    <div key={moduleId} style={{ marginBottom: "1rem" }}>
-                      <h4>Module: {moduleData.module_name} (Unknown)</h4>
-                      <pre
-                        style={{
-                          background: "#f4f4f4",
-                          padding: "1rem",
-                          borderRadius: "4px",
-                          overflowX: "auto",
-                        }}
-                      >
-                        {JSON.stringify(moduleData.raw_responses, null, 2)}
-                      </pre>
-                    </div>
-                  );
-                } else {
-                  return (
-                    <div key={moduleId} style={{ marginBottom: "1rem" }}>
-                      <h4>Module: {moduleData.module_name}</h4>
-                      {Object.keys(moduleData.sections).map((secIndex) => {
-                        const sectionData = moduleData.sections[secIndex];
-                        return (
-                          <div key={secIndex} style={{ marginLeft: "1rem", marginBottom: "1rem" }}>
-                            <h5>Section: {sectionData.section_name}</h5>
-                            <pre
-                              style={{
-                                background: "#f4f4f4",
-                                padding: "1rem",
-                                borderRadius: "4px",
-                                overflowX: "auto",
-                              }}
-                            >
-                              {JSON.stringify(sectionData.qa, null, 2)}
-                            </pre>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                }
-              })}
-            </div>
-          ))}
+          <div style={{ margin: "1rem 0" }}>
+            <p>
+              Total Users: {totalUsers} {totalUsers > 0 && `(Page ${currentPage} of ${totalPages})`}
+            </p>
+            <input
+              type="text"
+              value={filterUser}
+              onChange={(e) => {
+                setFilterUser(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Filter by User ID"
+              className="input-field"
+              style={{ width: "50%", marginBottom: "1rem" }}
+            />
+          </div>
+          <div style={{ marginBottom: "1rem", display: "flex", justifyContent: "center", gap: "1rem" }}>
+            <button
+              className="button"
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              style={{ width: "auto", padding: "0.5rem 1rem" }}
+            >
+              Previous
+            </button>
+            <button
+              className="button"
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              style={{ width: "auto", padding: "0.5rem 1rem" }}
+            >
+              Next
+            </button>
+          </div>
+          <div className="view-switcher" style={{ margin: "1rem 0" }}>
+            <button className="button" onClick={() => setView("table")}>
+              Table View
+            </button>
+            <button className="button" onClick={() => setView("timeline")}>
+              Timeline View
+            </button>
+            <button className="button" onClick={() => setView("json")}>
+              JSON Debug
+            </button>
+          </div>
+          {view === "table" && paginatedData && <TableView data={paginatedData} />}
+          {view === "timeline" && paginatedData && <TimelineView data={paginatedData} />}
+          {view === "json" && (
+            <pre style={{ background: "#f4f4f4", padding: "1rem", borderRadius: "4px" }}>
+              {JSON.stringify(data, null, 2)}
+            </pre>
+          )}
         </div>
       )}
     </div>

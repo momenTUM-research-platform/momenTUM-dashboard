@@ -6,7 +6,7 @@ body {
 }
 
 .container {
-  max-width: 600px;
+  max-width: 70%;
   margin: 2rem auto;
   background: #fff;
   padding: 2rem;
@@ -81,4 +81,15 @@ button:hover {
 
 .form-login {
   display: grid;
+}
+
+.table-container {
+  margin-top: 2rem;
+  overflow-x: auto; /* ensures horizontal scrolling if necessary */
+}
+
+.button.study-search {
+  display: block;
+  width: 30%;
+  margin: 10 auto;
 }
