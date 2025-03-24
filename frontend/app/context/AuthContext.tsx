@@ -3,16 +3,16 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 interface AuthContextType {
-  user: any; // undefined = not loaded yet, null = not authenticated, object = user data
+  user: any;
   setUser: (user: any) => void;
   refreshUser: () => Promise<void>;
+  logout: () => void;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Start with user as undefined to indicate "not loaded yet"
   const [user, setUser] = useState<any>(undefined);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -35,12 +35,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
+  const logout = () => {
+    localStorage.removeItem("token");
+    setUser(null);
+  };
+
   useEffect(() => {
     refreshUser();
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser, refreshUser, loading }}>
+    <AuthContext.Provider value={{ user, setUser, refreshUser, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

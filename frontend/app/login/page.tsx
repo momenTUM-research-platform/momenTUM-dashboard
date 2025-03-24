@@ -20,19 +20,18 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ username, password }),
       });
+
       if (!res.ok) {
         const errData = await res.json();
         setError(errData.detail || "Login failed");
         return;
       }
+
       const data = await res.json();
-      // Save the token to localStorage
       localStorage.setItem("token", data.access_token);
-      // Refresh the AuthContext (if refreshUser returns a promise, await it)
       await refreshUser();
-      // Redirect to the dashboard (or default page)
       router.push("/");
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred.");
     }
   };
@@ -45,7 +44,7 @@ export default function LoginPage() {
           <label htmlFor="username">Username</label>
           <input
             id="username"
-            name="username" // Required for browser autofill
+            name="username"
             type="text"
             value={username}
             autoComplete="username"
@@ -58,7 +57,7 @@ export default function LoginPage() {
           <label htmlFor="password">Password</label>
           <PasswordInput
             id="password"
-            name="password" // Required for browser autofill
+            name="password"
             value={password}
             autoComplete="current-password"
             onChange={(e) => setPassword(e.target.value)}
