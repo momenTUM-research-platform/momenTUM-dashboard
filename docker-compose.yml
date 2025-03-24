@@ -19,6 +19,8 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend:/app
+      - /app/node_modules # <-- creates the node_modules in frontend path
+      - /app/.next # <-- creates the .next folder in frontend path
 
   postgres:
     image: postgres:14

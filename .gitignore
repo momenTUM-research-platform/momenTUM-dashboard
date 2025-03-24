@@ -12,3 +12,4 @@ frontend/.next/
 backend/.env
 
 .vscode/
+venv
