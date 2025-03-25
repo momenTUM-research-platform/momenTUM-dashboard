@@ -1,0 +1,39 @@
+.wrapper {
+    margin-top: 2rem;
+    padding: 0 1rem;
+  }
+  
+  .userBlock {
+    margin-bottom: 2rem;
+    background-color: #fafafa;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+  
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  
+  .cell {
+    border: 1px solid #ddd;
+    padding: 0.5rem 0.75rem;
+    word-wrap: break-word;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9rem;
+    text-align: left;
+  }
+  
+  .jsonBlock {
+    margin: 0.5rem 0 0;
+    font-size: 0.75rem;
+    background-color: #f4f4f4;
+    padding: 0.5rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+  }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./login/page";
-import Dashboard from "./components/Dashboard";
+import Dashboard from "./components/Dashboard/Dashboard";
 
 export default function DefaultPage() {
   const router = useRouter();

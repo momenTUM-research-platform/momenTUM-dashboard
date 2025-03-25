@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
-import PasswordInput from "../components/PasswordInput";
+import PasswordInput from "../components/PasswordInput/PasswordInput";
 
 export default function AdminPanel() {
   const { user, refreshUser, loading } = useAuth();
@@ -338,6 +338,7 @@ export default function AdminPanel() {
             </select>
           </div>
           <button
+            className="button"
             type="submit"
             style={{
               width: "100%",
@@ -419,17 +420,18 @@ export default function AdminPanel() {
                   <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>
                     {editingUserId === u.id ? (
                       <>
-                        <button onClick={handleUpdateUser} style={{ marginRight: "0.5rem" }}>
+                        <button className="button" onClick={handleUpdateUser} style={{ marginRight: "0.5rem" }}>
                           Save
                         </button>
-                        <button onClick={() => setEditingUserId(null)}>Cancel</button>
+                        <button className="button" onClick={() => setEditingUserId(null)}>Cancel</button>
                       </>
                     ) : (
                       <>
-                        <button onClick={() => handleEditClick(u)} style={{ marginRight: "0.5rem" }}>
+                        <button className="button" onClick={() => handleEditClick(u)} style={{ marginRight: "0.5rem" }}>
                           Edit
                         </button>
                         <button
+                          className="button"
                           onClick={() => handleDeleteUser(u.id)}
                           style={{
                             backgroundColor: "#e74c3c",
@@ -453,13 +455,13 @@ export default function AdminPanel() {
                                   value={newResetPassword}
                                   onChange={(e) => setNewResetPassword(e.target.value)}
                                 />
-                                <button onClick={handleResetPassword} style={{ marginRight: "0.5rem" }}>
+                                <button className="button" onClick={handleResetPassword} style={{ marginRight: "0.5rem" }}>
                                   Save Password
                                 </button>
-                                <button onClick={() => setResetUserId(null)}>Cancel</button>
+                                <button className="button" onClick={() => setResetUserId(null)}>Cancel</button>
                               </>
                             ) : (
-                              <button onClick={() => setResetUserId(u.id)} style={{ marginRight: "0.5rem" }}>
+                              <button className="button" onClick={() => setResetUserId(u.id)} style={{ marginRight: "0.5rem" }}>
                                 Reset Password
                               </button>
                             )}

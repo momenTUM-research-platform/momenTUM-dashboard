@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "react": "^18.3.1",
+    "react-big-calendar": "^1.18.0",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/date-fns": "^2.5.3",
+    "@types/react-big-calendar": "^1.16.1"
+  }
+}

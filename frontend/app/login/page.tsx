@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
-import PasswordInput from "../components/PasswordInput";
+import PasswordInput from "../components/PasswordInput/PasswordInput";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -65,7 +65,7 @@ export default function LoginPage() {
             required
           />
         </div>
-        <button type="submit">Login</button>
+        <button className="button" type="submit">Login</button>
       </form>
       {error && <p className="error">{error}</p>}
     </div>

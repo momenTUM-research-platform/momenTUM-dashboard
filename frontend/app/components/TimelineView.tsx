@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import { StudyData } from "./TableView";
+import { StudyData } from "./TableView/TableView";
 
 interface TimelineItem {
   userId: string;
