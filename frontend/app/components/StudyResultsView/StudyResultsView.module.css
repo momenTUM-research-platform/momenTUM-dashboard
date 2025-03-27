@@ -2,7 +2,7 @@
     margin-top: 2rem;
     padding: 1rem;
     background: #fff;
-    border: 1px solid #eee;
+    border: 1px solid #e2e8f0; /* softer border */
     border-radius: 8px;
   }
   
@@ -25,27 +25,28 @@
     margin-bottom: 0.5rem;
     font-size: 0.9rem;
     font-weight: 500;
+    color: #4a5568;
   }
   
   .dropdown {
     padding: 0.6rem 0.8rem;
-    border: 1px solid #ddd;
+    border: 1px solid #cbd5e0;
     border-radius: 8px;
     font-size: 0.95rem;
     background-color: #fff;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 140 140' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolygon points='70,100 20,40 120,40' fill='%236F6F6F'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 140 140' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolygon points='70,100 20,40 120,40' fill='%234a5568'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.8rem center;
     background-size: 0.65rem auto;
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    transition: none;
   }
   
   .dropdown:focus {
-    border-color: #2F80ED;
-    box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.2);
+    border-color: #718096;
+    box-shadow: none;
     outline: none;
   }
   
@@ -58,22 +59,23 @@
   }
   
   .viewButton {
-    background-color: #f1f1f1;
-    border: 1px solid #ccc;
+    background-color: #f7fafc; /* very light gray */
+    border: 1px solid #e2e8f0;
     padding: 0.5rem 1rem;
     border-radius: 6px;
     cursor: pointer;
-    transition: background 0.2s ease;
+    transition: none;
+    color: #2d3748;  /* dark slate text for contrast */
   }
   
   .viewButton:hover {
-    background-color: #e0e0e0;
+    background-color: #f7fafc; /* no change on hover */
   }
   
   .viewButton.active {
-    background-color: #2F80ED;
+    background-color: #2d3748;
     color: #fff;
-    border-color: #2F80ED;
+    border-color: #2d3748;
   }
   
   /* Pagination */
@@ -86,27 +88,27 @@
   }
   
   .paginationButton {
-    background-color: #2F80ED;
+    background-color: #2d3748;
     color: #fff;
     padding: 0.4rem 0.8rem;
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    transition: background 0.2s ease;
+    transition: none;
   }
   
   .paginationButton:hover {
-    background-color: #1b65d3;
+    background-color: #2d3748;
   }
   
   .paginationButton:disabled {
-    background-color: #ccc;
+    background-color: #cbd5e0;
     cursor: not-allowed;
   }
   
   /* JSON Block */
   .jsonBlock {
-    background: #f4f4f4;
+    background: #f7fafc;
     padding: 1rem;
     border-radius: 4px;
     overflow-x: auto;

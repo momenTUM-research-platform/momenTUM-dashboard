@@ -1,48 +1,70 @@
 .header {
-    background-color: #2f80ed;
-    padding: 1rem 2rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: #ffffff;
-  }
-  
-  .nav {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-  }
-  
-  .link {
-    color: #ffffff;
-    text-decoration: none;
-    font-weight: bold;
-    font-size: 1.1rem;
-  }
-  
-  .loginLink {
-    color: #ffffff;
-    font-size: 1rem;
-    text-decoration: none;
-  }
-  
-  .userControls {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-  
-  .logoutButton {
-    background-color: #eb5757;
-    color: #ffffff;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background-color 0.2s ease;
-  }
-  
-  .logoutButton:hover {
-    background-color: #d84343;
-  }
+  background-color: #2d3748;  /* Dark slate background */
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #ffffff;
+}
+
+.nav {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.link {
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 1.2rem;
+  transition: color 0.2s ease;
+}
+
+.link:hover {
+  color: #cbd5e0;
+}
+
+.adminLink {
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 1rem;
+  margin-left: 1rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.adminLink:hover {
+  color: #cbd5e0;
+  border-color: #cbd5e0;
+}
+
+.userControls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logoutButton {
+  background-color: #e53e3e;
+  color: #ffffff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.logoutButton:hover {
+  background-color: #c53030;
+}
+
+.loginLink {
+  color: #ffffff;
+  font-size: 1rem;
+  text-decoration: none;
+}

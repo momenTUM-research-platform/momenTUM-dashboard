@@ -1,97 +1,99 @@
 .container {
-    max-width: 800px;
-    margin: 2rem auto;
-    padding: 2rem;
-    background: #fff;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
-  }
-  
-  .header {
-    font-size: 2rem;
-    margin-bottom: 0.5rem;
-    text-align: center;
-  }
-  
-  .welcome {
-    font-size: 1.2rem;
-    margin-bottom: 2rem;
-    text-align: center;
-  }
-  
-  .studySection {
-    margin-top: 2rem;
-  }
-  
-  .studyList {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-  
-  .studyItem {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 0.8rem;
-    font-size: 1.1rem;
-  }
-  
-  .studyLink {
-    text-decoration: none;
-    color: #2f80ed;
-    transition: color 0.2s ease;
-  }
-  
-  .studyLink:hover {
-    color: #1b65d3;
-  }
-  
-  /* Minimalist delete button */
-  .deleteButton {
-    background: none;
-    border: none;
-    color: #aaa;
-    font-size: 1.2rem;
-    cursor: pointer;
-    transition: color 0.2s ease;
-    padding: 0 0.4rem;
-  }
-  
-  .deleteButton:hover {
-    color: #555;
-  }
-  
-  .noStudies {
-    font-style: italic;
-    color: #666;
-    text-align: center;
-  }
-  
-  .buttonGroup {
-    margin-top: 1.5rem;
-    text-align: center;
-  }
-  
-  .button {
-    background-color: #2f80ed;
-    color: #fff;
-    padding: 0.6rem 1.2rem;
-    font-size: 1rem;
-    font-weight: 600;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 0.2s ease;
-  }
-  
-  .button:hover {
-    background-color: #1b65d3;
-  }
-  
-  .deleteMessage {
-    text-align: center;
-    margin-top: 1rem;
-    font-size: 0.95rem;
-    color: #d32f2f;
-  }
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+}
+
+.header {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+  color: #2d3748; /* dark slate */
+}
+
+.welcome {
+  font-size: 1.2rem;
+  margin-bottom: 2rem;
+  text-align: center;
+  color: #4a5568; /* muted text */
+}
+
+.studySection {
+  margin-top: 2rem;
+}
+
+.studyList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.studyItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.8rem;
+  font-size: 1.1rem;
+}
+
+.studyLink {
+  text-decoration: none;
+  color: #2d3748; /* dark slate */
+  transition: color 0.2s ease;
+}
+
+.studyLink:hover {
+  color: #1a202c; /* even darker slate */
+}
+
+/* Minimal delete button */
+.deleteButton {
+  background: none;
+  border: none;
+  color: #a0aec0; /* soft gray */
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  padding: 0 0.4rem;
+}
+
+.deleteButton:hover {
+  color: #718096; /* slightly darker gray */
+}
+
+.noStudies {
+  font-style: italic;
+  color: #718096;
+  text-align: center;
+}
+
+.buttonGroup {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.button {
+  background-color: #2d3748; /* dark slate */
+  color: #fff;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.button:hover {
+  background-color: #1a202c;
+}
+
+.deleteMessage {
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.95rem;
+  color: #e53e3e; /* muted red */
+}

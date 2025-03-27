@@ -1,20 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import styles from "./PasswordInput.module.css";
 
 export default function PasswordInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const [show, setShow] = useState(false);
 
   return (
-    <div className="password-input">
+    <div className={styles.passwordInput}>
       <input
         {...props}
         type={show ? "text" : "password"}
-        className="password-input__field"
+        className={styles.passwordInputField}
       />
       <button
         type="button"
-        className="password-input__toggle"
+        className={styles.passwordInputToggle}
         onClick={() => setShow(!show)}
       >
         {show ? (

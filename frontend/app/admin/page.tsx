@@ -4,19 +4,20 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
 import PasswordInput from "../components/PasswordInput/PasswordInput";
+import styles from "./AdminPanel.module.css";
 
 export default function AdminPanel() {
   const { user, refreshUser, loading } = useAuth();
   const router = useRouter();
-  
-  // State to indicate panel readiness
+
+  // Panel readiness
   const [isReady, setIsReady] = useState(false);
-  
-  // State for managing users list
+
+  // Users list
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
-  
-  // State for create user form
+
+  // Create user form
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newName, setNewName] = useState("");
@@ -26,24 +27,24 @@ export default function AdminPanel() {
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
   const [usernameExists, setUsernameExists] = useState(false);
-  
-  // State for inline editing of existing users
+
+  // Editing existing users
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editSurname, setEditSurname] = useState("");
   const [editEmail, setEditEmail] = useState("");
-  
-  // State for password reset
+
+  // Reset password
   const [resetUserId, setResetUserId] = useState<number | null>(null);
   const [newResetPassword, setNewResetPassword] = useState("");
 
-  // Basic password validation: at least 8 characters, one uppercase, one lowercase, one number.
+  // Basic password validation
   const isPasswordValid = (pwd: string) => {
     const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
     return regex.test(pwd);
   };
 
-  // On mount: refresh user info; if no token, redirect.
+  // On mount: check token, refresh user
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -53,7 +54,7 @@ export default function AdminPanel() {
     }
   }, [router, refreshUser]);
 
-  // Once auth loading is complete, check user role.
+  // After loading: verify user role
   useEffect(() => {
     if (!loading) {
       if (!user || user.role !== "admin") {
@@ -64,7 +65,7 @@ export default function AdminPanel() {
     }
   }, [user, loading, router]);
 
-  // Fetch the list of users.
+  // Fetch users
   const fetchUsers = async () => {
     const token = localStorage.getItem("token");
     try {
@@ -89,11 +90,13 @@ export default function AdminPanel() {
     }
   }, [isReady]);
 
-  // Check if the new username already exists.
+  // Check if username is taken
   const checkUsername = async () => {
     if (!newUsername) return;
     try {
-      const res = await fetch(`/api/auth/check-username?username=${encodeURIComponent(newUsername)}`);
+      const res = await fetch(
+        `/api/auth/check-username?username=${encodeURIComponent(newUsername)}`
+      );
       if (res.ok) {
         const data = await res.json();
         setUsernameExists(data.exists);
@@ -106,14 +109,16 @@ export default function AdminPanel() {
     }
   };
 
-  // Create user handler.
+  // Create user
   const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setCreateError("");
     setCreateSuccess("");
 
     if (!isPasswordValid(newPassword)) {
-      setCreateError("Password must be at least 8 characters long and include uppercase, lowercase, and a number.");
+      setCreateError(
+        "Password must be at least 8 characters and include uppercase, lowercase, and a number."
+      );
       return;
     }
     if (usernameExists) {
@@ -149,8 +154,8 @@ export default function AdminPanel() {
       return;
     }
 
-    const data = await res.json();
-    setCreateSuccess(`User created successfully: ${data.message}`);
+    const responseData = await res.json();
+    setCreateSuccess(`User created successfully: ${responseData.message}`);
     setNewUsername("");
     setNewPassword("");
     setNewName("");
@@ -161,7 +166,7 @@ export default function AdminPanel() {
     fetchUsers();
   };
 
-  // Delete user handler.
+  // Delete user
   const handleDeleteUser = async (userId: number) => {
     const token = localStorage.getItem("token");
     try {
@@ -182,7 +187,7 @@ export default function AdminPanel() {
     }
   };
 
-  // Start editing a user's details.
+  // Start editing
   const handleEditClick = (u: any) => {
     setEditingUserId(u.id);
     setEditName(u.name);
@@ -190,7 +195,7 @@ export default function AdminPanel() {
     setEditEmail(u.email);
   };
 
-  // Update user details handler.
+  // Update user
   const handleUpdateUser = async () => {
     const token = localStorage.getItem("token");
     try {
@@ -220,14 +225,16 @@ export default function AdminPanel() {
     }
   };
 
-  // Reset password handler with validation.
+  // Reset password
   const handleResetPassword = async () => {
     if (!newResetPassword) {
       alert("Please enter a new password.");
       return;
     }
     if (!isPasswordValid(newResetPassword)) {
-      alert("New password must be at least 8 characters long and include uppercase, lowercase, and a number.");
+      alert(
+        "New password must be at least 8 characters and include uppercase, lowercase, and a number."
+      );
       return;
     }
     const token = localStorage.getItem("token");
@@ -260,16 +267,16 @@ export default function AdminPanel() {
   }
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "800px", margin: "0 auto" }}>
-      <h1>Admin Panel</h1>
+    <div className={styles.container}>
+      <h1 className={styles.header}>Admin Panel</h1>
 
       {/* Create User Section */}
-      <section>
+      <section className={styles.section}>
         <h2>Create New User</h2>
-        {createError && <p style={{ color: "red" }}>{createError}</p>}
-        {createSuccess && <p style={{ color: "green" }}>{createSuccess}</p>}
+        {createError && <p className={styles.errorMessage}>{createError}</p>}
+        {createSuccess && <p className={styles.successMessage}>{createSuccess}</p>}
         <form onSubmit={handleCreateUser}>
-          <div style={{ marginBottom: "1rem" }}>
+          <div className={styles.formGroup}>
             <label>Username:</label>
             <input
               type="text"
@@ -277,16 +284,14 @@ export default function AdminPanel() {
               onChange={(e) => setNewUsername(e.target.value)}
               onBlur={checkUsername}
               required
-              style={{
-                width: "100%",
-                padding: "0.5rem",
-                border: usernameExists ? "1px solid red" : "1px solid #ccc",
-                borderRadius: "4px",
-              }}
+              className={styles.inputField}
+              style={{ borderColor: usernameExists ? "#e53e3e" : undefined }}
             />
-            {usernameExists && <p style={{ color: "red" }}>Username already exists.</p>}
+            {usernameExists && (
+              <p className={styles.errorMessage}>Username already exists.</p>
+            )}
           </div>
-          <div style={{ marginBottom: "1rem" }}>
+          <div className={styles.formGroup}>
             <label>Password:</label>
             <PasswordInput
               value={newPassword}
@@ -295,27 +300,27 @@ export default function AdminPanel() {
               required
             />
           </div>
-          <div style={{ marginBottom: "1rem" }}>
+          <div className={styles.formGroup}>
             <label>Name:</label>
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               required
-              style={{ width: "100%", padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px" }}
+              className={styles.inputField}
             />
           </div>
-          <div style={{ marginBottom: "1rem" }}>
+          <div className={styles.formGroup}>
             <label>Surname:</label>
             <input
               type="text"
               value={newSurname}
               onChange={(e) => setNewSurname(e.target.value)}
               required
-              style={{ width: "100%", padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px" }}
+              className={styles.inputField}
             />
           </div>
-          <div style={{ marginBottom: "1rem" }}>
+          <div className={styles.formGroup}>
             <label>Email:</label>
             <input
               type="email"
@@ -323,173 +328,181 @@ export default function AdminPanel() {
               onChange={(e) => setNewEmail(e.target.value)}
               required
               placeholder="example@example.com"
-              style={{ width: "100%", padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px" }}
+              className={styles.inputField}
             />
           </div>
-          <div style={{ marginBottom: "1rem" }}>
+          <div className={styles.formGroup}>
             <label>Role:</label>
             <select
               value={newRole}
               onChange={(e) => setNewRole(e.target.value)}
-              style={{ width: "100%", padding: "0.5rem", border: "1px solid #ccc", borderRadius: "4px" }}
+              className={styles.inputField}
             >
               <option value="user">User</option>
               <option value="admin">Admin</option>
             </select>
           </div>
-          <button
-            className="button"
-            type="submit"
-            style={{
-              width: "100%",
-              padding: "0.75rem",
-              backgroundColor: "#2F80ED",
-              border: "none",
-              color: "white",
-              fontSize: "1rem",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
+          <button type="submit" className={styles.button}>
             Create User
           </button>
         </form>
       </section>
 
-      <hr style={{ margin: "2rem 0" }} />
+      <hr className={styles.hr} />
 
       {/* Manage Users Section */}
-      <section>
+      <section className={styles.section}>
         <h2>Manage Users</h2>
         {loadingUsers ? (
           <p>Loading users...</p>
         ) : users.length === 0 ? (
           <p>No users found.</p>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={{ border: "1px solid #ccc", padding: "0.5rem" }}>ID</th>
-                <th style={{ border: "1px solid #ccc", padding: "0.5rem" }}>Username</th>
-                <th style={{ border: "1px solid #ccc", padding: "0.5rem" }}>Name</th>
-                <th style={{ border: "1px solid #ccc", padding: "0.5rem" }}>Surname</th>
-                <th style={{ border: "1px solid #ccc", padding: "0.5rem" }}>Email</th>
-                <th style={{ border: "1px solid #ccc", padding: "0.5rem" }}>Role</th>
-                <th style={{ border: "1px solid #ccc", padding: "0.5rem" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>{u.id}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>{u.username}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>
-                    {editingUserId === u.id ? (
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                      />
-                    ) : (
-                      u.name
-                    )}
-                  </td>
-                  <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>
-                    {editingUserId === u.id ? (
-                      <input
-                        type="text"
-                        value={editSurname}
-                        onChange={(e) => setEditSurname(e.target.value)}
-                      />
-                    ) : (
-                      u.surname
-                    )}
-                  </td>
-                  <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>
-                    {editingUserId === u.id ? (
-                      <input
-                        type="email"
-                        value={editEmail}
-                        onChange={(e) => setEditEmail(e.target.value)}
-                      />
-                    ) : (
-                      u.email
-                    )}
-                  </td>
-                  <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>{u.role}</td>
-                  <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>
-                    {editingUserId === u.id ? (
-                      <>
-                        <button className="button" onClick={handleUpdateUser} style={{ marginRight: "0.5rem" }}>
-                          Save
-                        </button>
-                        <button className="button" onClick={() => setEditingUserId(null)}>Cancel</button>
-                      </>
-                    ) : (
-                      <>
-                        <button className="button" onClick={() => handleEditClick(u)} style={{ marginRight: "0.5rem" }}>
-                          Edit
-                        </button>
-                        <button
-                          className="button"
-                          onClick={() => handleDeleteUser(u.id)}
-                          style={{
-                            backgroundColor: "#e74c3c",
-                            border: "none",
-                            color: "white",
-                            padding: "0.5rem",
-                            borderRadius: "4px",
-                            cursor: "pointer",
-                            marginRight: "0.5rem",
-                          }}
-                        >
-                          Delete
-                        </button>
-                        {u.username.toLowerCase() !== "admin" && (
-                          <>
-                            {resetUserId === u.id ? (
-                              <>
-                                <PasswordInput
-                                  type="password"
-                                  placeholder="New password"
-                                  value={newResetPassword}
-                                  onChange={(e) => setNewResetPassword(e.target.value)}
-                                />
-                                <button className="button" onClick={handleResetPassword} style={{ marginRight: "0.5rem" }}>
-                                  Save Password
-                                </button>
-                                <button className="button" onClick={() => setResetUserId(null)}>Cancel</button>
-                              </>
-                            ) : (
-                              <button className="button" onClick={() => setResetUserId(u.id)} style={{ marginRight: "0.5rem" }}>
-                                Reset Password
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </>
-                    )}
-                  </td>
+          <div className={styles.tableWrapper}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Username</th>
+                  <th>Name</th>
+                  <th>Surname</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.id}</td>
+                    <td>{u.username}</td>
+                    <td>
+                      {editingUserId === u.id ? (
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className={styles.inputField}
+                        />
+                      ) : (
+                        u.name
+                      )}
+                    </td>
+                    <td>
+                      {editingUserId === u.id ? (
+                        <input
+                          type="text"
+                          value={editSurname}
+                          onChange={(e) => setEditSurname(e.target.value)}
+                          className={styles.inputField}
+                        />
+                      ) : (
+                        u.surname
+                      )}
+                    </td>
+                    <td>
+                      {editingUserId === u.id ? (
+                        <input
+                          type="email"
+                          value={editEmail}
+                          onChange={(e) => setEditEmail(e.target.value)}
+                          className={styles.inputField}
+                        />
+                      ) : (
+                        u.email
+                      )}
+                    </td>
+                    <td>{u.role}</td>
+                    <td>
+                      {editingUserId === u.id ? (
+                        <>
+                          <button
+                            className={styles.actionButton}
+                            onClick={handleUpdateUser}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className={styles.actionButton}
+                            onClick={() => setEditingUserId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className={styles.actionButton}
+                            onClick={() => handleEditClick(u)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className={styles.deleteButton}
+                            onClick={() => handleDeleteUser(u.id)}
+                          >
+                            Delete
+                          </button>
+                          {u.username.toLowerCase() !== "admin" && (
+                            <>
+                              {resetUserId === u.id ? (
+                                <>
+                                  <PasswordInput
+                                    type="password"
+                                    placeholder="New password"
+                                    value={newResetPassword}
+                                    onChange={(e) =>
+                                      setNewResetPassword(e.target.value)
+                                    }
+                                  />
+                                  <button
+                                    className={styles.actionButton}
+                                    onClick={handleResetPassword}
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    className={styles.actionButton}
+                                    onClick={() => setResetUserId(null)}
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  className={styles.actionButton}
+                                  onClick={() => setResetUserId(u.id)}
+                                >
+                                  Reset Password
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
-  
-      <hr style={{ margin: "2rem 0" }} />
-  
-      <section style={{ textAlign: "center", marginTop: "2rem" }}>
+
+      <hr className={styles.hr} />
+
+      {/* Navigation */}
+      <section className={styles.navSection}>
         <h2>Navigation</h2>
-        <p>
-          <a href="/" style={{ textDecoration: "none", color: "#2F80ED", margin: "0 0.5rem" }}>
+        <div className={styles.navLinks}>
+          <a href="/" className={styles.navLink}>
             Dashboard
           </a>
-          |
-          <a href="/select-studies" style={{ textDecoration: "none", color: "#2F80ED", margin: "0 0.5rem" }}>
-            Select Studies
+          <span>|</span>
+          <a href="/retrieve-study" className={styles.navLink}>
+            Retrieve Studies
           </a>
-        </p>
+        </div>
       </section>
     </div>
   );

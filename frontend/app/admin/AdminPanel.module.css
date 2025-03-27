@@ -1,0 +1,173 @@
+.container {
+    max-width: 50%;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: #ffffff;
+    border-radius: 12px;
+    /* box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); */
+  }
+  
+  .header {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: #2d3748;
+  }
+  
+  .section {
+    margin-bottom: 2rem;
+  }
+  
+  .hr {
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    margin: 2rem 0;
+  }
+  
+  /* Form elements */
+  .formGroup {
+    margin-bottom: 1rem;
+  }
+  
+  .formGroup label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: #4a5568;
+    font-weight: 500;
+  }
+  
+  .inputField {
+    width: 100%;
+    padding: 0.65rem;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    font-size: 1rem;
+    background-color: #f7fafc;
+    transition: border-color 0.2s ease;
+  }
+  
+  .inputField:focus {
+    border-color: #718096;
+    outline: none;
+    background-color: #fff;
+  }
+  
+  .button {
+    background-color: #2d3748;
+    color: #fff;
+    padding: 0.65rem 1.2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    width: 100%;
+  }
+  
+  .button:hover {
+    background-color: #1a202c;
+  }
+  
+  /* Table wrapper for horizontal scroll if needed */
+  .tableWrapper {
+    width: 100%;
+    overflow-x: auto;
+    margin-top: 1rem;
+  }
+  
+  /* Table styling */
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+  
+  .table th,
+  .table td {
+    border: 1px solid #cbd5e0;
+    padding: 0.65rem;
+    text-align: left;
+    font-size: 0.9rem;
+    white-space: nowrap; /* ensures text doesn't wrap, helps with layout */
+  }
+  
+  .table th {
+    background-color: #f7fafc;
+    color: #2d3748;
+    font-weight: 600;
+  }
+  
+  .table td {
+    background-color: #fff;
+  }
+  
+  /* Action buttons in the table */
+  .actionButton,
+  .deleteButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;     /* smaller font for table actions */
+    padding: 0.3rem 0.6rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 0.4rem;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    color: #fff;
+  }
+  
+  /* Edit / Save / Reset Password button */
+  .actionButton {
+    background-color: #2d3748;
+  }
+  
+  .actionButton:hover {
+    background-color: #1a202c;
+  }
+  
+  /* Delete button */
+  .deleteButton {
+    background-color: #e53e3e;
+  }
+  
+  .deleteButton:hover {
+    background-color: #c53030;
+  }
+  
+  /* Navigation section */
+  .navSection {
+    text-align: center;
+    margin-top: 2rem;
+  }
+  
+  .navLinks {
+    display: inline-block;
+  }
+  
+  .navLink {
+    text-decoration: none;
+    color: #2d3748;
+    font-size: 1rem;
+    margin: 0 0.5rem;
+    transition: color 0.2s ease;
+  }
+  
+  .navLink:hover {
+    color: #1a202c;
+  }
+  
+  /* Messages */
+  .successMessage {
+    color: #38a169;
+    text-align: center;
+    margin-top: 1rem;
+  }
+  
+  .errorMessage {
+    color: #e53e3e;
+    text-align: center;
+    margin-top: 1rem;
+  }

@@ -5,7 +5,7 @@
 
 .userBlock {
   margin-bottom: 2rem;
-  background-color: #fafafa;
+  background-color: #f7fafc; /* very light gray */
   padding: 1rem;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -18,7 +18,7 @@
 }
 
 .cell {
-  border: 1px solid #ddd;
+  border: 1px solid #cbd5e0; /* soft border */
   padding: 0.5rem 0.75rem;
   word-wrap: break-word;
   white-space: normal;
@@ -31,7 +31,7 @@
 .jsonBlock {
   margin: 0.5rem 0 0;
   font-size: 0.75rem;
-  background-color: #f4f4f4;
+  background-color: #f7fafc;
   padding: 0.5rem;
   border-radius: 4px;
   overflow-x: auto;
@@ -40,11 +40,11 @@
 
 /* Answer cell colours */
 .answerEmpty {
-  background-color: #fdecea; /* Subtle light red */
+  background-color: #fdecea; /* subtle light red */
 }
 
 .answerFilled {
-  background-color: #e6f4ea; /* Subtle light green */
+  background-color: #e6f4ea; /* subtle light green */
 }
 
 /* Grouping Toggle Styles */
@@ -58,20 +58,20 @@
 .groupToggleButton {
   padding: 0.5rem 1rem;
   font-size: 0.9rem;
-  background-color: #f1f1f1;
-  color: #333;
-  border: 1px solid #ccc;
+  background-color: #f7fafc;  /* very light background */
+  color: #2d3748;           /* dark slate text */
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: none;
 }
 
 .groupToggleButton:hover {
-  background-color: #e0e0e0;
+  background-color: #f7fafc; /* no change on hover */
 }
 
 .groupToggleButton.active {
-  background-color: #2F80ED;
+  background-color: #2d3748; /* dark slate */
   color: #fff;
-  border-color: #2F80ED;
+  border-color: #2d3748;
 }

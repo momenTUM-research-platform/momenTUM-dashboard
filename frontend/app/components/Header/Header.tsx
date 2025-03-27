@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import styles from "./Header.module.css"; // <-- CSS module
+import styles from "./Header.module.css"; // CSS module
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -28,6 +28,11 @@ export default function Header() {
         <Link href="/" className={styles.link}>
           MomenTUM Dashboard
         </Link>
+        {user && user.role === "admin" && (
+          <Link href="/admin" className={styles.adminLink}>
+            Admin Panel
+          </Link>
+        )}
       </nav>
       <div className={styles.userControls}>
         {user ? (
