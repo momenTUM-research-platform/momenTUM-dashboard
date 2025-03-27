@@ -50,7 +50,7 @@ textarea {
   border: 1px solid #ccc;
   border-radius: 6px;
   font-size: 1rem;
-  margin-bottom: 1rem;
+  /* margin-bottom: 1rem; */
   background-color: #fafafa;
   transition: border-color 0.2s;
 }

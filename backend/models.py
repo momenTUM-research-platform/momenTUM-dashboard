@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import JSON
+from sqlalchemy.ext.mutable import MutableList
 from typing import List, Optional
 
 Base = SQLModel  # Define Base as SQLModel
@@ -12,5 +13,7 @@ class User(Base, table=True):
     surname: str = Field(nullable=False)
     email: str = Field(nullable=False, unique=True, index=True)
     role: str = Field(default="user", nullable=False)
-    studies: List[int] = Field(default_factory=list, sa_column=Column(JSON))
-
+    studies: List[str] = Field(
+        default_factory=list,
+        sa_column=Column(MutableList.as_mutable(JSON))
+    )

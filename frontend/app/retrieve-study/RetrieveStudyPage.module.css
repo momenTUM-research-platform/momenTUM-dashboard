@@ -1,72 +1,51 @@
 .container {
-    max-width: 80%;
-    margin: 2rem auto;
-    background: #ffffff;
-    padding: 2rem;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
-  }
-  
-  .inputField {
-    width: 100%;
-    padding: 0.6rem;
-    margin-top: 0.5rem;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font-size: 1rem;
-  }
-  
-  .button {
-    background-color: #2F80ED;
-    color: white;
-    padding: 0.6rem 1.2rem;
-    font-weight: 600;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 0.2s ease;
-  }
-  
-  .button:hover {
-    background-color: #1b65d3;
-  }
-  
-  .error {
-    color: red;
-    margin-top: 1rem;
-    text-align: center;
-  }
-  
-  .pagination {
-    display: flex;
-    justify-content: center;
-    margin-top: 1.5rem;
-    gap: 1rem;
-  }
-  
-  .viewSwitcher {
-    margin: 1.5rem 0;
-    display: flex;
-    justify-content: center;
-    gap: 1rem;
-  }
-  
-  .viewButton {
-    background-color: #f1f1f1;
-    color: #333;
-    border: 1px solid #ccc;
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  
-  .viewButton:hover {
-    background-color: #e0e0e0;
-  }
-  
-  .viewButton.active {
-    background-color: #2F80ED;
-    color: white;
-    border-color: #2F80ED;
-  }
+  max-width: 80%;
+  margin: 2rem auto;
+  background: #ffffff;
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+}
+
+.searchForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  align-items: center;
+}
+
+.inputField {
+  flex: 1;
+  padding: 0.7rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.inputField:focus {
+  border-color: #2F80ED;
+  outline: none;
+}
+
+.button {
+  background-color: #2F80ED;
+  color: #fff;
+  padding: 0.7rem 1.2rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.button:hover {
+  background-color: #1b65d3;
+}
+
+.error {
+  color: #d32f2f;
+  margin-top: 1rem;
+  text-align: center;
+}

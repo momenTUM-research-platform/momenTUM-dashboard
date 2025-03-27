@@ -1,79 +1,172 @@
 "use client";
 
-import React, { useMemo } from "react";
-import dynamic from "next/dynamic";
-import { Calendar, dateFnsLocalizer, type Event } from "react-big-calendar";
-import { format, parse, startOfWeek, getDay } from "date-fns";
-import { enUS } from "date-fns/locale";
-import "react-big-calendar/lib/css/react-big-calendar.css";
+import React, { useMemo, useState } from "react";
+import FullCalendar, { EventClickArg } from "@fullcalendar/react";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
 import styles from "./CalendarView.module.css";
-import { StudyData } from "../TableView/TableView";
 
-const locales = {
-  "en-US": enUS,
-};
+// --- Types from your TableView ---
+export interface GroupedBySection {
+  section_name: string;
+  qa: Record<string, any>;
+  response_time: string;
+}
 
-const localizer = dateFnsLocalizer({
-  format,
-  parse,
-  startOfWeek: () => startOfWeek(new Date(), { weekStartsOn: 1 }),
-  getDay,
-  locales,
-});
+export interface GroupedByModule {
+  module_name: string;
+  sections: {
+    [sectionIndex: string]: GroupedBySection;
+  };
+}
+
+export interface GroupedResponses {
+  [userId: string]: {
+    [moduleId: string]:
+      | GroupedByModule
+      | {
+          module_name: string;
+          raw_responses: any[];
+        };
+  };
+}
+
+export interface StudyData {
+  study_id: string;
+  grouped_responses: GroupedResponses;
+}
+
+// --- Extended event props to store extra data ---
+interface ExtendedEventProps {
+  userId: string;
+  moduleId: string;
+  sectionKey?: string;
+  details: any;
+  responseTime?: string;
+  type: "raw" | "structured";
+}
 
 interface CalendarViewProps {
   data: StudyData;
 }
 
-const CalendarView: React.FC<CalendarViewProps> = ({ data }) => {
-  const events: Event[] = useMemo(() => {
-    const eventList: Event[] = [];
+// --- Modal component to show event details ---
+const EventDetailModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  eventData: ExtendedEventProps | null;
+}> = ({ isOpen, onClose, eventData }) => {
+  if (!isOpen || !eventData) return null;
 
+  return (
+    <div className={styles.modalOverlay}>
+      <div className={styles.modalContent}>
+        <button onClick={onClose} className={styles.closeButton}>
+          Close
+        </button>
+        <h3>Event Details</h3>
+        <p>
+          <strong>User ID:</strong> {eventData.userId}
+        </p>
+        <p>
+          <strong>Module ID:</strong> {eventData.moduleId}
+        </p>
+        {eventData.sectionKey && (
+          <p>
+            <strong>Section:</strong> {eventData.sectionKey}
+          </p>
+        )}
+        {eventData.responseTime && (
+          <p>
+            <strong>Response Time:</strong> {eventData.responseTime}
+          </p>
+        )}
+        <h4>Details:</h4>
+        <pre className={styles.jsonBlock}>
+          {JSON.stringify(eventData.details, null, 2)}
+        </pre>
+      </div>
+    </div>
+  );
+};
+
+const CalendarView: React.FC<CalendarViewProps> = ({ data }) => {
+  const [selectedEvent, setSelectedEvent] =
+    useState<ExtendedEventProps | null>(null);
+  const [isModalOpen, setModalOpen] = useState(false);
+
+  // Map study data into FullCalendar event objects.
+  const events = useMemo(() => {
+    const eventList: any[] = [];
     Object.entries(data.grouped_responses).forEach(([userId, modules]) => {
-      Object.entries(modules).forEach(([_, moduleData]) => {
+      Object.entries(modules).forEach(([moduleId, moduleData]) => {
         if ("raw_responses" in moduleData) {
-          moduleData.raw_responses.forEach((resp: any) => {
+          // Process raw responses
+          (moduleData.raw_responses as any[]).forEach((resp) => {
             if (resp.response_time) {
               eventList.push({
                 title: `${moduleData.module_name} (raw)`,
-                start: new Date(resp.response_time),
-                end: new Date(resp.response_time),
-                allDay: false,
+                start: new Date(resp.response_time).toISOString(),
+                end: new Date(resp.response_time).toISOString(),
+                extendedProps: {
+                  userId,
+                  moduleId,
+                  details: resp,
+                  type: "raw",
+                },
               });
             }
           });
         } else {
-          Object.values(moduleData.sections).forEach((section: any) => {
+          // Process structured responses
+          const modData = moduleData as GroupedByModule;
+          Object.entries(modData.sections).forEach(([sectionKey, section]) => {
             if (section.response_time) {
-              const questions = Object.entries(section.qa)
-                .map(([q, a]) => `${q}: ${a}`)
-                .join(" | ");
               eventList.push({
-                title: `${moduleData.module_name} - ${section.section_name} | ${questions}`,
-                start: new Date(section.response_time),
-                end: new Date(section.response_time),
-                allDay: false,
+                title: `${modData.module_name} - ${section.section_name}`,
+                start: new Date(section.response_time).toISOString(),
+                end: new Date(section.response_time).toISOString(),
+                extendedProps: {
+                  userId,
+                  moduleId,
+                  sectionKey,
+                  details: section.qa,
+                  responseTime: section.response_time,
+                  type: "structured",
+                },
               });
             }
           });
         }
       });
     });
-
     return eventList;
   }, [data]);
 
+  const handleEventClick = (clickInfo: EventClickArg) => {
+    setSelectedEvent(clickInfo.event.extendedProps as ExtendedEventProps);
+    setModalOpen(true);
+  };
+
   return (
-    <div className={styles.wrapper} suppressHydrationWarning>
-      <Calendar
-        localizer={localizer}
+    <div className={styles.wrapper}>
+      <FullCalendar
+        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+        initialView="dayGridMonth"
+        headerToolbar={{
+          left: "prev,next today",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek,timeGridDay",
+        }}
         events={events}
-        startAccessor="start"
-        endAccessor="end"
-        defaultView="month"
-        views={["month", "week", "day", "agenda"]}
-        style={{ height: "80vh", marginTop: "1rem" }}
-        tooltipAccessor="title"
+        height="80vh"
+        eventClick={handleEventClick}
+      />
+      <EventDetailModal
+        isOpen={isModalOpen}
+        onClose={() => setModalOpen(false)}
+        eventData={selectedEvent}
       />
     </div>
   );

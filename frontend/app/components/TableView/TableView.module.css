@@ -1,39 +1,77 @@
 .wrapper {
-    margin-top: 2rem;
-    padding: 0 1rem;
-  }
-  
-  .userBlock {
-    margin-bottom: 2rem;
-    background-color: #fafafa;
-    padding: 1rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  }
-  
-  .table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-  }
-  
-  .cell {
-    border: 1px solid #ddd;
-    padding: 0.5rem 0.75rem;
-    word-wrap: break-word;
-    white-space: normal;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 0.9rem;
-    text-align: left;
-  }
-  
-  .jsonBlock {
-    margin: 0.5rem 0 0;
-    font-size: 0.75rem;
-    background-color: #f4f4f4;
-    padding: 0.5rem;
-    border-radius: 4px;
-    overflow-x: auto;
-    white-space: pre-wrap;
-  }
+  margin-top: 2rem;
+  padding: 0 1rem;
+}
+
+.userBlock {
+  margin-bottom: 2rem;
+  background-color: #fafafa;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.cell {
+  border: 1px solid #ddd;
+  padding: 0.5rem 0.75rem;
+  word-wrap: break-word;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.jsonBlock {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  background-color: #f4f4f4;
+  padding: 0.5rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+/* Answer cell colours */
+.answerEmpty {
+  background-color: #fdecea; /* Subtle light red */
+}
+
+.answerFilled {
+  background-color: #e6f4ea; /* Subtle light green */
+}
+
+/* Grouping Toggle Styles */
+.groupToggle {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.groupToggleButton {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  background-color: #f1f1f1;
+  color: #333;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.groupToggleButton:hover {
+  background-color: #e0e0e0;
+}
+
+.groupToggleButton.active {
+  background-color: #2F80ED;
+  color: #fff;
+  border-color: #2F80ED;
+}

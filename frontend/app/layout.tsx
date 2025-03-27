@@ -1,4 +1,4 @@
-import "react-big-calendar/lib/css/react-big-calendar.css"; // Required globally
+import "./globals.css"; 
 import "./globals.css"; 
 import Header from "./components/Header/Header";
 import { AuthProvider } from "./context/AuthContext";

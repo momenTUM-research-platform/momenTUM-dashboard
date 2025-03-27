@@ -1,0 +1,26 @@
+.container {
+    max-width: 90%;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+  }
+  
+  .header {
+    text-align: center;
+    font-size: 2rem;
+    margin-bottom: 1rem;
+  }
+  
+  .loading,
+  .error,
+  .noData {
+    text-align: center;
+    font-size: 1.1rem;
+    margin-top: 2rem;
+  }
+  
+  .error {
+    color: red;
+  }

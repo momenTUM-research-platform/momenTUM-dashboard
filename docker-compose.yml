@@ -19,8 +19,8 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend:/app
-      - /app/node_modules # <-- creates the node_modules in frontend path
-      - /app/.next # <-- creates the .next folder in frontend path
+      - node_modules:/app/node_modules
+      - next_build:/app/.next
 
   postgres:
     image: postgres:14
@@ -57,3 +57,5 @@ volumes:
   mongo_data:
   caddy_data:
   caddy_config:
+  node_modules:
+  next_build:
