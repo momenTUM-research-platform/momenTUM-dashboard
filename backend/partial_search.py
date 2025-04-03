@@ -31,7 +31,7 @@ def get_studies_suggestions(query: str):
         ))
         # Return a simple list with study_id and name for suggestions
         suggestions = [
-            {"study_id": s.get("properties", {}).get("study_id"), "name": s.get("properties", {}).get("name")}
+            {"study_id": s.get("properties", {}).get("study_id"), "name": s.get("properties", {}).get("study_name")}
             for s in suggestions
         ]
         return suggestions

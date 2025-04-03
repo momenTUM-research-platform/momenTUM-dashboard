@@ -20,10 +20,8 @@ export interface GroupedResponses {
   [userId: string]: {
     [moduleId: string]:
       | GroupedByModule
-      | {
-          module_name: string;
-          raw_responses: any[];
-        };
+      | { module_name: string; raw_responses: any[] }
+      | any; // extra primitive field like extracted_study_id
   };
 }
 
@@ -32,20 +30,27 @@ export interface StudyData {
   grouped_responses: GroupedResponses;
 }
 
-// Helper function to extract Study ID from a user’s modules.
-// We assume that the module with module_name "Study ID" holds the participant’s entered ID.
-const getStudyIdForUser = (modules: GroupedResponses[string]) => {
+/**
+ * Extracts the Study ID from a user's modules.
+ * If the modules object contains an "extracted_study_id" property and it's a string, that is used.
+ * Otherwise, it searches for a module with module_name "Study ID" and returns its answer.
+ */
+const getStudyIdForUser = (modules: GroupedResponses[string]): string => {
+  if ("extracted_study_id" in modules && typeof modules["extracted_study_id"] === "string") {
+    return modules["extracted_study_id"];
+  }
   let studyId = "";
   Object.entries(modules).forEach(([moduleId, moduleData]) => {
-    if (!("raw_responses" in moduleData)) {
-      const modData = moduleData as GroupedByModule;
-      if (modData.module_name.trim() === "Study ID") {
-        const section = modData.sections["0"];
-        if (section && section.qa) {
-          const answers = Object.values(section.qa);
-          if (answers.length > 0) {
-            studyId = String(answers[0]).trim();
-          }
+    // Skip non-object values (like primitives)
+    if (typeof moduleData !== "object" || moduleData === null) return;
+    if (moduleId === "extracted_study_id") return; // already handled
+    const modData = moduleData as GroupedByModule;
+    if (modData.module_name.trim() === "Study ID") {
+      const section = modData.sections["0"];
+      if (section && section.qa) {
+        const answers = Object.values(section.qa);
+        if (answers.length > 0) {
+          studyId = String(answers[0]).trim();
         }
       }
     }
@@ -53,12 +58,18 @@ const getStudyIdForUser = (modules: GroupedResponses[string]) => {
   return studyId || "Unknown";
 };
 
-// Modified renderRows now accepts an optional prefix to ensure keys are unique across users.
-const renderRows = (modules: GroupedResponses[string], prefix: string = "") => {
+/**
+ * Renders rows for a given user's modules.
+ * The optional prefix ensures unique keys when merging rows from multiple users.
+ */
+const renderRows = (modules: GroupedResponses[string], prefix: string = ""): JSX.Element[] => {
   const rows: JSX.Element[] = [];
   const unknownRows: JSX.Element[] = [];
 
   Object.entries(modules).forEach(([moduleId, moduleData]) => {
+    // Skip if moduleData is not an object (for example, if it's the extracted_study_id field)
+    if (typeof moduleData !== "object" || moduleData === null) return;
+
     if ("raw_responses" in moduleData) {
       const fallback = moduleData as { module_name: string; raw_responses: any[] };
       fallback.raw_responses.forEach((resp, idx) => {
@@ -102,10 +113,9 @@ interface TableViewProps {
 }
 
 const TableView: React.FC<TableViewProps> = ({ data }) => {
-  // State to switch grouping: false = group by App ID, true = group by Study ID.
   const [groupByStudyId, setGroupByStudyId] = useState(false);
 
-  // Render grouped by App ID (original behavior)
+  // Group by App ID (default)
   const renderByAppId = () => {
     return Object.entries(data.grouped_responses).map(([userId, modules]) => (
       <div key={userId} className={styles.userBlock}>
@@ -126,7 +136,7 @@ const TableView: React.FC<TableViewProps> = ({ data }) => {
     ));
   };
 
-  // Render grouped by Study ID: group responses from all app IDs sharing the same Study ID.
+  // Group by Study ID using the extracted study id.
   const renderByStudyId = () => {
     const groups: { [studyId: string]: { userId: string; modules: GroupedResponses[string] }[] } = {};
     Object.entries(data.grouped_responses).forEach(([userId, modules]) => {
@@ -147,7 +157,6 @@ const TableView: React.FC<TableViewProps> = ({ data }) => {
             </td>
           </tr>
         );
-        // Pass a prefix based on the user ID to ensure unique keys.
         combinedRows.push(...renderRows(modules, `${userId}-`));
       });
       return (

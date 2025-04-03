@@ -7,27 +7,31 @@ import LoginPage from "./login/page";
 import Dashboard from "./components/Dashboard/Dashboard";
 
 export default function DefaultPage() {
-  const router = useRouter();
-  const { user, refreshUser, loading } = useAuth();
+  const { user, loading } = useAuth();
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const router = useRouter();
 
+  // Fetch dashboard data only when the user is set.
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
+    if (user) {
+      const token = localStorage.getItem("token");
+      if (!token) return;
 
-    const fetchDashboard = async () => {
-      try {
-        const res = await fetch("/api/dashboard", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        setDashboardData(data);
-      } catch (error) {
-        console.error("Error loading dashboard:", error);
-      }
-    };
+      const fetchDashboard = async () => {
+        try {
+          const res = await fetch("/api/dashboard", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error("Failed to load dashboard");
+          const data = await res.json();
+          setDashboardData(data);
+        } catch (error) {
+          console.error("Error loading dashboard:", error);
+        }
+      };
 
-    fetchDashboard();
+      fetchDashboard();
+    }
   }, [user]);
 
   if (loading) return <p>Loading...</p>;

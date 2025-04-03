@@ -3,34 +3,18 @@
 import { useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import styles from "./StudyResultsView.module.css";
-import TableView, { StudyData, GroupedResponses, GroupedByModule } from "../TableView/TableView";
+import TableView, { StudyData, GroupedResponses, GroupedByModule, UserGroupedResponses } from "../TableView/TableView";
 
 const CalendarView = dynamic(() => import("../CalendarView/CalendarView"), {
   ssr: false,
   loading: () => <p>Loading calendar...</p>,
 });
 
-// Helper: Extract Study ID from a user's modules.
-const getStudyIdForUser = (modules: GroupedResponses[string]): string => {
-  let studyId = "";
-  Object.entries(modules).forEach(([_, moduleData]) => {
-    if (!("raw_responses" in moduleData)) {
-      const modData = moduleData as GroupedByModule;
-      if (modData.module_name.trim() === "Study ID") {
-        const section = modData.sections["0"];
-        if (section && section.qa) {
-          const answers = Object.values(section.qa);
-          if (answers.length > 0) {
-            studyId = String(answers[0]).trim();
-          }
-        }
-      }
-    }
-  });
-  return studyId || "Unknown";
+// Updated helper: Now takes UserGroupedResponses.
+const getStudyIdForUser = (modules: UserGroupedResponses): string => {
+  return modules.extracted_study_id || "Unknown";
 };
 
-// Helper: Filter study data based on selected filters.
 function filterStudyData(
   data: StudyData,
   selectedStudy: string,
@@ -41,29 +25,34 @@ function filterStudyData(
   for (const [userId, modules] of Object.entries(data.grouped_responses)) {
     const userStudyId = getStudyIdForUser(modules);
     if (selectedStudy && userStudyId !== selectedStudy) continue;
-    const filteredModules: GroupedResponses[string] = {};
+    const filteredModules: UserGroupedResponses = {};
     for (const [moduleId, moduleData] of Object.entries(modules)) {
-      const moduleName =
-        "raw_responses" in moduleData
-          ? moduleData.module_name
-          : (moduleData as GroupedByModule).module_name;
-      if (selectedModule && moduleName !== selectedModule) continue;
-      if ("raw_responses" in moduleData) {
-        filteredModules[moduleId] = moduleData;
-      } else {
-        const modData = moduleData as GroupedByModule;
-        const filteredSections: { [key: string]: any } = {};
-        for (const [secKey, section] of Object.entries(modData.sections)) {
-          if (selectedSection && section.section_name !== selectedSection) continue;
-          filteredSections[secKey] = section;
-        }
-        if (Object.keys(filteredSections).length > 0) {
-          filteredModules[moduleId] = { ...modData, sections: filteredSections };
+      // Skip the extracted_study_id field
+      if (moduleId === "extracted_study_id") continue;
+      // Ensure moduleData is an object
+      if (moduleData && typeof moduleData === "object") {
+        const moduleName =
+          "raw_responses" in moduleData
+            ? moduleData.module_name
+            : (moduleData as GroupedByModule).module_name;
+        if (selectedModule && moduleName !== selectedModule) continue;
+        if ("raw_responses" in moduleData) {
+          filteredModules[moduleId] = moduleData;
+        } else {
+          const modData = moduleData as GroupedByModule;
+          const filteredSections: { [key: string]: any } = {};
+          for (const [secKey, section] of Object.entries(modData.sections)) {
+            if (selectedSection && section.section_name !== selectedSection) continue;
+            filteredSections[secKey] = section;
+          }
+          if (Object.keys(filteredSections).length > 0) {
+            filteredModules[moduleId] = { ...modData, sections: filteredSections };
+          }
         }
       }
     }
     if (Object.keys(filteredModules).length > 0) {
-      filteredResponses[userId] = filteredModules;
+      filteredResponses[userId] = { ...filteredModules, extracted_study_id: userStudyId };
     }
   }
   return { study_id: data.study_id, grouped_responses: filteredResponses };
@@ -81,7 +70,7 @@ const StudyResultsView: React.FC<StudyResultsViewProps> = ({ data }) => {
   const [selectedModuleFilter, setSelectedModuleFilter] = useState("");
   const [selectedSectionFilter, setSelectedSectionFilter] = useState("");
 
-  // Compute distinct filter options.
+  // Compute distinct Study IDs using the helper.
   const distinctStudyIds = useMemo(() => {
     if (!data) return [];
     const ids = new Set<string>();
@@ -91,27 +80,31 @@ const StudyResultsView: React.FC<StudyResultsViewProps> = ({ data }) => {
     return Array.from(ids).sort();
   }, [data]);
 
+  // Compute distinct Modules; skip if moduleData is not an object.
   const distinctModules = useMemo(() => {
     if (!data) return [];
     const modulesSet = new Set<string>();
     Object.values(data.grouped_responses).forEach((modules) => {
       Object.values(modules).forEach((moduleData) => {
-        const name =
-          "raw_responses" in moduleData
-            ? moduleData.module_name
-            : (moduleData as GroupedByModule).module_name;
-        modulesSet.add(name);
+        if (moduleData && typeof moduleData === "object") {
+          const name =
+            "raw_responses" in moduleData
+              ? moduleData.module_name
+              : (moduleData as GroupedByModule).module_name;
+          modulesSet.add(name);
+        }
       });
     });
     return Array.from(modulesSet).sort();
   }, [data]);
 
+  // Compute distinct Sections; skip values that are not objects.
   const distinctSections = useMemo(() => {
     if (!data) return [];
     const sectionsSet = new Set<string>();
     Object.values(data.grouped_responses).forEach((modules) => {
       Object.values(modules).forEach((moduleData) => {
-        if (!("raw_responses" in moduleData)) {
+        if (moduleData && typeof moduleData === "object" && !("raw_responses" in moduleData)) {
           const modData = moduleData as GroupedByModule;
           Object.values(modData.sections).forEach((section) => {
             sectionsSet.add(section.section_name);
@@ -134,7 +127,7 @@ const StudyResultsView: React.FC<StudyResultsViewProps> = ({ data }) => {
     const totalPages = Math.ceil(totalUsers / pageSize);
     const current = Math.min(currentPage, totalPages) || 1;
     const paginatedUserIds = allUserIds.slice((current - 1) * pageSize, current * pageSize);
-    const paginatedGroupedResponses: { [userId: string]: any } = {};
+    const paginatedGroupedResponses: GroupedResponses = {};
     paginatedUserIds.forEach((userId) => {
       paginatedGroupedResponses[userId] = filteredData.grouped_responses[userId];
     });

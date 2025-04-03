@@ -1,12 +1,13 @@
+/* Container for the calendar and modal */
 .wrapper {
   background: #fff;
   padding: 1rem;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin: 1rem;
 }
 
-/* FullCalendar is styled by its own CSS imports */
-
+/* Modal overlay that covers the entire viewport */
 .modalOverlay {
   position: fixed;
   top: 0;
@@ -20,30 +21,39 @@
   z-index: 1000;
 }
 
+/* Modal content box */
 .modalContent {
   background: #fff;
-  padding: 1rem;
+  padding: 1.5rem;
   border-radius: 8px;
   max-width: 600px;
   width: 90%;
   max-height: 80%;
   overflow-y: auto;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  position: relative;
 }
 
+/* Close button in the modal */
 .closeButton {
-  float: right;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
   background: #2f80ed;
   color: #fff;
   border: none;
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   border-radius: 4px;
   cursor: pointer;
+  font-size: 0.875rem;
 }
 
+/* JSON block styling for the debug view */
 .jsonBlock {
   background: #f5f5f5;
   padding: 1rem;
   border-radius: 4px;
   overflow-x: auto;
+  font-family: monospace;
+  font-size: 0.875rem;
 }

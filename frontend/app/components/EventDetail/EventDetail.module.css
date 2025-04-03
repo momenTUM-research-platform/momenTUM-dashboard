@@ -1,0 +1,72 @@
+.modalOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .modalContent {
+    background: #fff;
+    padding: 1rem;
+    border-radius: 8px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80%;
+    overflow-y: auto;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    position: relative;
+  }
+  
+  .closeButton {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: #2f80ed;
+    color: #fff;
+    border: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .title {
+    margin-top: 0;
+    text-align: center;
+  }
+  
+  .detailsTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+  }
+  
+  .detailsTable th,
+  .detailsTable td {
+    padding: 0.5rem;
+    border: 1px solid #e2e8f0;
+    text-align: left;
+  }
+  
+  .detailsHeader {
+    margin-top: 1rem;
+    text-align: center;
+  }
+  
+  /* Color styling for answers */
+  .answerFilled {
+    background-color: #e6f4ea; /* light green */
+    /* color: #2f855a; */
+    padding: 0.5rem;
+  }
+  
+  .answerMissing {
+    background-color: #fdecea; /* light red */
+    /* color: #e53e3e; */
+    padding: 0.5rem;
+  }

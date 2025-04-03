@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
 import PasswordInput from "../components/PasswordInput/PasswordInput";
@@ -9,11 +9,19 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const { user, refreshUser } = useAuth();
   const router = useRouter();
-  const { refreshUser } = useAuth();
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (user) {
+      router.replace("/");
+    }
+  }, [user]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -29,8 +37,9 @@ export default function LoginPage() {
 
       const data = await res.json();
       localStorage.setItem("token", data.access_token);
+
       await refreshUser();
-      router.push("/");
+      // Redirect will happen via useEffect when user is updated
     } catch {
       setError("An unexpected error occurred.");
     }
@@ -40,32 +49,11 @@ export default function LoginPage() {
     <div className="container">
       <h1>Login</h1>
       <form onSubmit={handleSubmit} className="form-login">
-        <div>
-          <label htmlFor="username">Username</label>
-          <input
-            id="username"
-            name="username"
-            type="text"
-            value={username}
-            autoComplete="username"
-            placeholder="Enter username"
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-        </div>
-        <div style={{ marginTop: "1rem" }}>
-          <label htmlFor="password">Password</label>
-          <PasswordInput
-            id="password"
-            name="password"
-            value={password}
-            autoComplete="current-password"
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter password"
-            required
-          />
-        </div>
-        <button className="button" type="submit">Login</button>
+        <label>Username</label>
+        <input value={username} onChange={(e) => setUsername(e.target.value)} required />
+        <label>Password</label>
+        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <button type="submit" className="button">Login</button>
       </form>
       {error && <p className="error">{error}</p>}
     </div>

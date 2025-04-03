@@ -1,0 +1,10 @@
+:80 {
+    @api {
+        path /api/*
+    }
+    reverse_proxy @api backend-dev:8000
+
+    reverse_proxy frontend-dev:3000
+
+    encode gzip
+}

@@ -1,0 +1,5 @@
+dashboard.momentumresearch.eu {
+    reverse_proxy /api/* backend-prod:8000
+    reverse_proxy /* frontend-prod:3000
+    encode gzip
+}

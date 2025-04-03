@@ -9,20 +9,31 @@
 
 .searchForm {
   display: flex;
-  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1.5rem;
   align-items: center;
 }
 
+.inputWrapper {
+  position: relative;
+  flex: 1 0 100%;
+  min-width: 0;
+}
+
 .inputField {
-  flex: 1;
+  display: block;
+  width: 100%;
+  max-width: 100%;
   padding: 0.75rem;
   border: 1px solid #cbd5e0;
   border-radius: 8px;
   font-size: 1rem;
   background-color: #f7fafc;
   transition: border-color 0.2s ease, background-color 0.2s ease;
+  box-sizing: border-box;
+  /* Reset Safari default appearance */
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .inputField:focus {
@@ -50,4 +61,47 @@
   color: #e53e3e;
   margin-top: 1rem;
   text-align: center;
+}
+
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.25rem;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  transform: none; /* Safari override */
+}
+
+.dropdownItem {
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  border-bottom: 1px solid #f1f1f1;
+}
+
+.dropdownItem:last-child {
+  border-bottom: none;
+}
+
+.dropdownItem:hover {
+  background-color: #f0f0f0;
+}
+
+.saveMessage {
+  margin-top: 1rem;
+  font-size: 0.95rem;
+  color: #2b6cb0;
+  text-align: center;
+}
+
+.saveStudy {
+  margin-bottom: 1.5rem;
 }

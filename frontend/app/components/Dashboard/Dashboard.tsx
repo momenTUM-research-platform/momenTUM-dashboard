@@ -1,20 +1,41 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styles from "./Dashboard.module.css";
 
 interface DashboardProps {
   user: any;
-  dashboardData: any; // dashboardData.surveys is an array of study IDs (strings)
+  dashboardData: any; // should contain { surveys: string[] }
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ user, dashboardData }) => {
   const [deleteMessage, setDeleteMessage] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [surveys, setSurveys] = useState<string[]>([]);
+
+  // Get token from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const t = localStorage.getItem("token");
+      if (t) setToken(t);
+    }
+  }, []);
+
+  // Update surveys once dashboardData is available
+  useEffect(() => {
+    if (dashboardData?.surveys) {
+      setSurveys(dashboardData.surveys);
+    }
+  }, [dashboardData]);
 
   const handleDeleteStudy = async (studyId: string) => {
+    if (!token) {
+      setDeleteMessage("Authentication token not available.");
+      return;
+    }
+
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch("/api/user/studies", {
         method: "DELETE",
         headers: {
@@ -23,6 +44,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, dashboardData }) => {
         },
         body: JSON.stringify({ study_id: studyId }),
       });
+
       if (!res.ok) {
         const errData = await res.json();
         setDeleteMessage(
@@ -32,8 +54,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, dashboardData }) => {
         );
       } else {
         setDeleteMessage("Study deleted successfully!");
-        // Refresh the dashboard (this reloads the page)
-        window.location.reload();
+        setSurveys((prev) => prev.filter((id) => id !== studyId));
       }
     } catch (error) {
       setDeleteMessage("Error deleting study");
@@ -47,9 +68,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, dashboardData }) => {
 
       <div className={styles.studySection}>
         <h2>Your Studies</h2>
-        {dashboardData?.surveys && dashboardData.surveys.length > 0 ? (
+        {surveys && surveys.length > 0 ? (
           <ul className={styles.studyList}>
-            {dashboardData.surveys.map((studyId: string) => (
+            {surveys.map((studyId: string) => (
               <li key={studyId} className={styles.studyItem}>
                 <Link href={`/study/${studyId}`} className={styles.studyLink}>
                   {studyId}
@@ -67,9 +88,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, dashboardData }) => {
         ) : (
           <p className={styles.noStudies}>No studies associated.</p>
         )}
+
         {deleteMessage && (
           <p className={styles.deleteMessage}>{deleteMessage}</p>
         )}
+
         <div className={styles.buttonGroup}>
           <Link href="/retrieve-study">
             <button className={styles.button}>Add/Search Studies</button>

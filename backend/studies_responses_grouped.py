@@ -30,7 +30,7 @@ def convert_object_ids(obj):
 @router.get("/studies_responses_grouped/{study_id}")
 def get_grouped_study_responses(study_id: str):
     try:
-        # Fetch responses
+        # Fetch responses matching study_id (either in "raw" or explicit field)
         pattern = rf'"study_id":"{study_id}"'
         regex = re.compile(pattern)
         query = {"$or": [{"raw": {"$regex": regex}}, {"study_id": study_id}]}
@@ -38,10 +38,10 @@ def get_grouped_study_responses(study_id: str):
         if not response_docs:
             raise HTTPException(status_code=404, detail=f"No responses found for study_id {study_id}")
 
-        # Parse raw fields and extract module_ids
         parsed_responses = []
         encountered_module_ids = set()
 
+        # Parse each response document, updating from "raw" if present.
         for doc in response_docs:
             if "raw" in doc and isinstance(doc["raw"], str):
                 try:
@@ -53,15 +53,14 @@ def get_grouped_study_responses(study_id: str):
             if "module_id" in doc:
                 encountered_module_ids.add(doc["module_id"])
 
-        # Fetch all study documents with matching study_id
+        # Fetch study documents with matching study_id in properties.
         matching_studies = list(studies_collection.find({"properties.study_id": study_id}))
         if not matching_studies:
             raise HTTPException(status_code=404, detail=f"No study documents found for study_id {study_id}")
 
-        # Build a mapping: module_id → latest study_doc that contains it
+        # Build a mapping: module_id → latest study_doc that contains it.
         module_to_study_map = {}
         for mod_id in encountered_module_ids:
-            # Find all studies that include this module
             studies_with_module = [
                 s for s in matching_studies if any(m.get("id") == mod_id for m in s.get("modules", []))
             ]
@@ -71,13 +70,13 @@ def get_grouped_study_responses(study_id: str):
 
         grouped = {}
 
+        # Group responses by user_id.
         for doc in parsed_responses:
             user_id = doc.get("user_id", "unknown")
             mod_id = doc.get("module_id") or "unknown_module"
             module_name = doc.get("module_name", "Unknown Module")
             response_time = doc.get("response_time", "Unknown")
 
-            # Parse responses field if it's a string
             responses_data = doc.get("responses", {})
             if isinstance(responses_data, str):
                 try:
@@ -92,15 +91,13 @@ def get_grouped_study_responses(study_id: str):
                 study_doc = module_to_study_map[mod_id]
                 module = next((m for m in study_doc.get("modules", []) if m.get("id") == mod_id), None)
                 if not module:
-                    continue  # Should not happen
-
+                    continue
                 sections = module.get("params", {}).get("sections", [])
                 if mod_id not in grouped[user_id]:
                     grouped[user_id][mod_id] = {
                         "module_name": module.get("name", "Unknown Module"),
                         "sections": {}
                     }
-
                 for idx, section in enumerate(sections):
                     sec_key = str(idx)
                     section_name = section.get("name", f"Section {idx + 1}")
@@ -117,13 +114,30 @@ def get_grouped_study_responses(study_id: str):
                         if q_id and q_id in responses_data:
                             grouped[user_id][mod_id]["sections"][sec_key]["qa"][q_text] = responses_data[q_id]
             else:
-                # Raw fallback if module mapping isn't found
                 if "unknown_module" not in grouped[user_id]:
                     grouped[user_id]["unknown_module"] = {
                         "module_name": module_name,
                         "raw_responses": []
                     }
                 grouped[user_id]["unknown_module"]["raw_responses"].append(doc)
+
+        # --- New: Extract Study ID for each user ---
+        # For each user, scan through modules to find one with module_name "Study ID"
+        # and extract its answer from section "0" (if available)
+        for user_id, modules in grouped.items():
+            extracted_study_id = None
+            for key, mod in modules.items():
+                # Skip if this is our extra field already
+                if key == "extracted_study_id":
+                    continue
+                if mod.get("module_name", "").strip() == "Study ID" and "sections" in mod:
+                    section0 = mod["sections"].get("0")
+                    if section0 and section0.get("qa"):
+                        answers = list(section0["qa"].values())
+                        if len(answers) > 0:
+                            extracted_study_id = str(answers[0]).strip()
+                            break
+            modules["extracted_study_id"] = extracted_study_id or "Unknown"
 
         return convert_object_ids({
             "study_id": study_id,

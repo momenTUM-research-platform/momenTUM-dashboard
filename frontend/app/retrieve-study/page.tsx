@@ -6,13 +6,21 @@ import styles from "./RetrieveStudyPage.module.css";
 
 export default function RetrieveStudyPage() {
   const [studyQuery, setStudyQuery] = useState("");
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<{ study_id: string; name: string }[]>([]);
   const [saveMessage, setSaveMessage] = useState("");
+  const [token, setToken] = useState<string | null>(null);
 
-  // Fetch suggestions for partial study search (debounced)
+  // Set token from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setToken(localStorage.getItem("token"));
+    }
+  }, []);
+
+  // Fetch suggestions (debounced)
   useEffect(() => {
     const handler = setTimeout(() => {
       if (studyQuery.length > 2) {
@@ -27,6 +35,7 @@ export default function RetrieveStudyPage() {
     return () => clearTimeout(handler);
   }, [studyQuery]);
 
+  // Handle search form submission
   const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -51,13 +60,16 @@ export default function RetrieveStudyPage() {
 
   // Save the current study (data.study_id) to the user's profile.
   const handleSaveStudy = async () => {
+    if (!token) {
+      setSaveMessage("No token available.");
+      return;
+    }
+    const studyToSave = data?.study_id;
+    if (!studyToSave) {
+      setSaveMessage("No study to save.");
+      return;
+    }
     try {
-      const token = localStorage.getItem("token");
-      const studyToSave = data?.study_id;
-      if (!studyToSave) {
-        setSaveMessage("No study to save.");
-        return;
-      }
       const res = await fetch("/api/user/studies", {
         method: "POST",
         headers: {
@@ -85,20 +97,34 @@ export default function RetrieveStudyPage() {
     <div className={styles.container}>
       <h1>Retrieve Study Responses</h1>
       <form onSubmit={handleSearch} className={styles.searchForm}>
-        <input
-          type="text"
-          list="studySuggestions"
-          value={studyQuery}
-          onChange={(e) => setStudyQuery(e.target.value)}
-          placeholder="Search studies by ID or name..."
-          required
-          className={styles.inputField}
-        />
-        <datalist id="studySuggestions">
-          {suggestions.map((s, idx) => (
-            <option key={`${s.study_id}-${idx}`} value={s.study_id} label={s.name} />
-          ))}
-        </datalist>
+        <div className={styles.inputWrapper}>
+          <input
+            type="text"
+            value={studyQuery}
+            onChange={(e) => setStudyQuery(e.target.value)}
+            placeholder="Search studies by ID or name..."
+            required
+            className={styles.inputField}
+            autoComplete="off"
+          />
+          {suggestions.length > 0 && (
+            <ul className={styles.dropdown}>
+              {suggestions.map((s, idx) => (
+                <li
+                  key={`${s.study_id}-${idx}`}
+                  className={styles.dropdownItem}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // Prevents input blur and layout issues
+                    setStudyQuery(s.study_id);
+                    setSuggestions([]);
+                  }}
+                >
+                  {s.study_id} — {s.name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <button type="submit" className={styles.button}>
           Search
         </button>
