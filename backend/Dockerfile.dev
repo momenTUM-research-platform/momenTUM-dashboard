@@ -3,11 +3,14 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# Install netcat for wait-for-postgres logic
+RUN apt-get update && apt-get install -y netcat && apt-get clean
+
 # Copy and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the source code (in development, you may mount a volume so changes are live)
+# Copy the source code
 COPY . .
 
 # Use the entrypoint script to start your app (ensure it has executable permissions)
