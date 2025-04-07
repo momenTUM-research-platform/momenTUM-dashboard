@@ -1,91 +1,61 @@
 /* Container for the calendar and modal */
 .wrapper {
   background: #fff;
-  padding: 1rem;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  height: 100vh;        /* Full viewport height */
-  margin: 0;            /* Remove margin that causes scroll */
+  height: 100vh;
+  margin: 0;
   padding: 1rem;
   box-sizing: border-box;
-  overflow: hidden;     /* Prevent scroll */
+  overflow: visible; /* Changed from hidden to visible for modals */
   display: flex;
   flex-direction: column;
 }
 
-/* Modal overlay that covers the entire viewport */
-.modalOverlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-/* Modal content box */
-.modalContent {
-  background: #fff;
-  padding: 1.5rem;
-  border-radius: 8px;
-  max-width: 600px;
-  width: 90%;
-  max-height: 80%;
-  overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  position: relative;
-}
-
-/* Close button in the modal */
-.closeButton {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: #2f80ed;
-  color: #fff;
-  border: none;
-  padding: 0.4rem 0.8rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.875rem;
-}
-
-/* JSON block styling for the debug view */
-.jsonBlock {
-  background: #f5f5f5;
-  padding: 1rem;
-  border-radius: 4px;
-  overflow-x: auto;
-  font-family: monospace;
-  font-size: 0.875rem;
-}
-
+/* Calendar day cell styles */
 .dayCellContent {
   position: relative;
   font-size: 0.85rem;
+  padding: 4px;
+  height: 100%;
+}
+.dayNumber {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-weight: bold;
 }
 
+/* + Note button: hidden by default, then fades in on hover */
 .addNoteButton {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
   font-size: 0.7rem;
-  margin-top: 0.25rem;
   background-color: #edf2f7;
   color: #2d3748;
   border: none;
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  pointer-events: none;
 }
-
+.dayCellContent:hover .addNoteButton {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Ensure the + Note button background doesn't change on hover */
 .addNoteButton:hover {
-  background-color: #e2e8f0;
+  background-color: #edf2f7;
 }
 
+/* Note display in day cell */
 .note {
-  margin-top: 4px;
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
   font-size: 0.65rem;
   color: #4a5568;
   background-color: #fefcbf;
@@ -93,6 +63,7 @@
   border-radius: 4px;
 }
 
+/* Note entry styling */
 .noteEntry {
   display: flex;
   justify-content: space-between;
@@ -102,6 +73,7 @@
   margin-top: 2px;
 }
 
+/* Delete button styling */
 .deleteNote {
   background: transparent;
   border: none;
@@ -111,7 +83,6 @@
   padding: 0;
   line-height: 1;
 }
-
 .deleteNote:hover {
   color: #c53030;
 }

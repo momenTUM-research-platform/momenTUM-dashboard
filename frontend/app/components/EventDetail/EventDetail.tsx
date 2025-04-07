@@ -75,6 +75,7 @@ const EventDetail: React.FC<EventDetailProps> = ({ isOpen, onClose, eventData })
               <tr>
                 <th>Question</th>
                 <th>Answer(s)</th>
+                <th>Response Time</th>
               </tr>
             </thead>
             <tbody>
@@ -86,20 +87,54 @@ const EventDetail: React.FC<EventDetailProps> = ({ isOpen, onClose, eventData })
                   "answers" in value &&
                   Array.isArray(value.answers)
                 ) {
+                  const answers = value.answers;
+                  const responseTimes = value.responseTimes || [];
                   return (
-                    <tr key={question}>
-                      <td>{question}</td>
-                      <td>
-                        {value.answers.map((ans: any, idx: number) => (
-                          <div key={idx} className={styles.answerText}>
+                    <React.Fragment key={question}>
+                      <tr>
+                        <td rowSpan={answers.length}>{question}</td>
+                        <td
+                          className={
+                            isAnswerEmpty(answers[0])
+                              ? styles.answerMissing
+                              : styles.answerFilled
+                          }
+                        >
+                          {Array.isArray(answers[0])
+                            ? answers[0].join(", ")
+                            : String(answers[0])}
+                        </td>
+                        <td>
+                          {responseTimes[0]
+                            ? formatDate(responseTimes[0])
+                            : ""}
+                        </td>
+                      </tr>
+                      {answers.slice(1).map((ans, idx) => (
+                        <tr key={idx}>
+                          <td
+                            className={
+                              isAnswerEmpty(ans)
+                                ? styles.answerMissing
+                                : styles.answerFilled
+                            }
+                          >
                             {Array.isArray(ans) ? ans.join(", ") : String(ans)}
-                          </div>
-                        ))}
-                      </td>
-                    </tr>
+                          </td>
+                          <td>
+                            {responseTimes[idx + 1]
+                              ? formatDate(responseTimes[idx + 1])
+                              : ""}
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
                   );
                 } else {
-                  // Otherwise, treat the value as a single answer.
+                  // For a single answer (or if value is not an aggregated QA object)
+                  const answer = Array.isArray(value)
+                    ? value.join(", ")
+                    : String(value);
                   return (
                     <tr key={question}>
                       <td>{question}</td>
@@ -110,8 +145,9 @@ const EventDetail: React.FC<EventDetailProps> = ({ isOpen, onClose, eventData })
                             : styles.answerFilled
                         }
                       >
-                        {Array.isArray(value) ? value.join(", ") : String(value)}
+                        {answer}
                       </td>
+                      <td></td>
                     </tr>
                   );
                 }

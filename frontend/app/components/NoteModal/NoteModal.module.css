@@ -1,3 +1,4 @@
+/* Full viewport overlay with semi-transparent background */
 .overlay {
     position: fixed;
     top: 0;
@@ -11,22 +12,42 @@
     z-index: 9999;
   }
   
+  /* Modal content box */
   .modal {
-    background-color: white;
+    position: relative; /* Ensures that the close button is positioned relative to this container */
+    background-color: #fff;
     padding: 1.5rem;
     border-radius: 10px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
     width: 90%;
     max-width: 400px;
     z-index: 10000;
+ }
+  
+  /* Close button styling: "x" placed in the top-right corner of the modal block */
+  .closeButton {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #333;
+  }
+
+  .closeButton:hover {
+    background-color: transparent;
   }
   
+  /* Label styling for form fields */
   .label {
     display: block;
     margin-top: 1rem;
     font-weight: 600;
   }
   
+  /* Shared styling for select dropdowns and textareas */
   .select,
   .textarea {
     width: 100%;
@@ -37,22 +58,24 @@
     font-size: 0.9rem;
   }
   
+  /* Additional styling for the textarea */
   .textarea {
     min-height: 80px;
     resize: vertical;
   }
   
+  /* Save button styling */
   .saveButton {
     margin-top: 1rem;
-    background-color: #2f80ed;
+    /* background-color: #2f80ed; */
     color: white;
     padding: 0.5rem 1rem;
     border: none;
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.9rem;
+    transition: background-color 0.2s ease-in-out
   }
-  
   .saveButton:hover {
-    background-color: #276dd8;
+    /* background-color: #276dd8; */
   }

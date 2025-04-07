@@ -1,35 +1,32 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import FullCalendar, { EventClickArg } from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import EventDetail, { ExtendedEventProps } from "../EventDetail/EventDetail";
+import NoteModal from "../NoteModal/NoteModal";
+import NoteViewerModal from "../NoteModal/NoteViewerModal";
 import styles from "./CalendarView.module.css";
 
-// --- Types ---
 export interface GroupedBySection {
   section_name: string;
-  // Each question maps to an array of responses,
-  // where each response object has an answer and a response_time.
   qa: Record<string, { answer: any; response_time: string }[]>;
 }
 
 export interface GroupedByModule {
   module_name: string;
-  sections: {
-    [sectionIndex: string]: GroupedBySection;
-  };
+  sections: Record<string, GroupedBySection>;
 }
 
 export interface GroupedResponses {
-  [userId: string]: {
-    [moduleId: string]:
-      | GroupedByModule
-      | { module_name: string; raw_responses: any[] }
-      | any; // may include extra primitive like extracted_study_id
-  } & { extracted_study_id?: string };
+  [userId: string]: Record<
+    string,
+    GroupedByModule | { module_name: string; raw_responses: any[] } | any
+  > & {
+    extracted_study_id?: string;
+  };
 }
 
 export interface StudyData {
@@ -37,7 +34,6 @@ export interface StudyData {
   grouped_responses: GroupedResponses;
 }
 
-// Utility: Generate a hash code for a string (used for color selection)
 function hashCode(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -55,54 +51,108 @@ const colorPalette = [
   "#dd6b20",
 ];
 
-// Returns a color from the palette based on the participant ID.
 function getColorForParticipant(participantId: string): string {
   const index = Math.abs(hashCode(participantId)) % colorPalette.length;
   return colorPalette[index];
 }
 
-// Helper to extract participant’s study ID from the modules.
-// If an "extracted_study_id" property exists, use it; otherwise, fall back to the userId.
-function getExtractedStudyId(
-  userId: string,
-  modules: GroupedResponses[string]
-): string {
-  if (modules && typeof modules === "object" && "extracted_study_id" in modules) {
-    const id = modules["extracted_study_id"];
-    return typeof id === "string" ? id : String(id);
-  }
-  return userId;
+/**
+ * Always return a user key in the format "study_id (user_id)".
+ */
+function getUserKey(userId: string, modules: GroupedResponses[string]): string {
+  return typeof modules.extracted_study_id === "string"
+    ? `${modules.extracted_study_id} (${userId})`
+    : userId;
 }
 
-interface CalendarViewProps {
-  data: StudyData;
-}
-
-const CalendarView: React.FC<CalendarViewProps> = ({ data }) => {
-  const [selectedEvent, setSelectedEvent] = useState<ExtendedEventProps | null>(null);
+const CalendarView: React.FC<{ data: StudyData }> = ({ data }) => {
+  const [selectedEvent, setSelectedEvent] =
+    useState<ExtendedEventProps | null>(null);
   const [isModalOpen, setModalOpen] = useState(false);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [viewerModalOpen, setViewerModalOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedViewerNote, setSelectedViewerNote] = useState<{
+    user: string;
+    note: string;
+  } | null>(null);
+  const [notes, setNotes] = useState<Record<string, { [user: string]: string }>>({});
+  const [allUsers, setAllUsers] = useState<string[]>([]);
 
+  // Load stored notes and transform keys if needed.
+  useEffect(() => {
+    const stored = localStorage.getItem("calendarNotes");
+    if (stored) {
+      let parsed = JSON.parse(stored);
+      let updated = false;
+      for (const date in parsed) {
+        const dayNotes = parsed[date];
+        for (const key in dayNotes) {
+          // If key is not in the "study_id (user_id)" format, update it.
+          if (!key.includes("(")) {
+            if (data.grouped_responses[key]) {
+              const newKey = getUserKey(key, data.grouped_responses[key]);
+              dayNotes[newKey] = dayNotes[key];
+              delete dayNotes[key];
+              updated = true;
+            }
+          }
+        }
+      }
+      if (updated) {
+        localStorage.setItem("calendarNotes", JSON.stringify(parsed));
+      }
+      setNotes(parsed);
+    }
+  }, [data]);
+
+  // Build list of users in proper format for the NoteModal.
+  useEffect(() => {
+    const users = Object.entries(data.grouped_responses).map(([uid, modules]) =>
+      getUserKey(uid, modules)
+    );
+    setAllUsers(users);
+  }, [data]);
+
+  const saveNote = (user: string, date: string, noteText: string) => {
+    const updated = { ...notes };
+    if (!updated[date]) updated[date] = {};
+    updated[date][user] = noteText;
+    setNotes(updated);
+    localStorage.setItem("calendarNotes", JSON.stringify(updated));
+  };
+
+  const deleteNote = (user: string, date: string) => {
+    const updated = { ...notes };
+    if (updated[date]) {
+      delete updated[date][user];
+      if (Object.keys(updated[date]).length === 0) {
+        delete updated[date];
+      }
+      setNotes(updated);
+      localStorage.setItem("calendarNotes", JSON.stringify(updated));
+    }
+  };
+
+  // Generate events as before.
   const events = useMemo(() => {
     const eventList: any[] = [];
-
     Object.entries(data.grouped_responses).forEach(([userId, modules]) => {
-      const participantId = getExtractedStudyId(userId, modules);
+      const participantId = getUserKey(userId, modules);
       const color = getColorForParticipant(participantId);
-
       Object.entries(modules).forEach(([moduleId, moduleData]) => {
-        // Skip non-object values (e.g. the extracted_study_id field)
-        if (moduleId === "extracted_study_id" || typeof moduleData !== "object" || moduleData === null)
+        if (moduleId === "extracted_study_id" || typeof moduleData !== "object")
           return;
-
-        // CASE 1: Raw responses – each response becomes its own event.
         if ("raw_responses" in moduleData) {
-          const fallback = moduleData as { module_name: string; raw_responses: any[] };
+          const fallback = moduleData as {
+            module_name: string;
+            raw_responses: any[];
+          };
           fallback.raw_responses.forEach((resp) => {
             if (resp.response_time) {
               eventList.push({
                 title: `${fallback.module_name} (raw)`,
                 start: new Date(resp.response_time).toISOString(),
-                end: new Date(resp.response_time).toISOString(),
                 color,
                 textColor: "#fff",
                 extendedProps: {
@@ -111,80 +161,61 @@ const CalendarView: React.FC<CalendarViewProps> = ({ data }) => {
                   details: resp,
                   responseTime: resp.response_time,
                   type: "raw",
-                } as ExtendedEventProps,
+                },
               });
             }
           });
         } else {
-          // CASE 2: Structured module with sections containing QA arrays.
-          // Instead of aggregating everything into one event,
-          // group answers by calendar day.
           const modData = moduleData as GroupedByModule;
-          const dayGroups: {
-            [day: string]: {
-              aggregatedQA: Record<string, { answers: any[]; responseTimes: string[] }>;
-              representativeTime: Date;
-            };
-          } = {};
-          if (modData.sections) {
-            Object.values(modData.sections).forEach((section) => {
-              Object.entries(section.qa).forEach(([question, responses]) => {
-                if (!Array.isArray(responses)) return;
-                responses.forEach((entry) => {
-                  const dt = new Date(entry.response_time);
-                  const dayStr = dt.toISOString().split("T")[0]; // e.g. "2025-04-07"
-                  if (!dayGroups[dayStr]) {
-                    dayGroups[dayStr] = {
-                      aggregatedQA: {},
-                      representativeTime: dt,
-                    };
-                  }
-                  if (dt < dayGroups[dayStr].representativeTime) {
-                    dayGroups[dayStr].representativeTime = dt;
-                  }
-                  if (!(question in dayGroups[dayStr].aggregatedQA)) {
-                    dayGroups[dayStr].aggregatedQA[question] = { answers: [], responseTimes: [] };
-                  }
-                  dayGroups[dayStr].aggregatedQA[question].answers.push(entry.answer);
-                  dayGroups[dayStr].aggregatedQA[question].responseTimes.push(entry.response_time);
-                });
+          const dayGroups: Record<string, any> = {};
+          Object.values(modData.sections).forEach((section) => {
+            Object.entries(section.qa).forEach(([question, responses]) => {
+              responses.forEach((entry) => {
+                const dt = new Date(entry.response_time);
+                const dayStr = dt.toISOString().split("T")[0];
+                if (!dayGroups[dayStr]) {
+                  dayGroups[dayStr] = {
+                    aggregatedQA: {},
+                    representativeTime: dt,
+                  };
+                }
+                if (!(question in dayGroups[dayStr].aggregatedQA)) {
+                  dayGroups[dayStr].aggregatedQA[question] = {
+                    answers: [],
+                    responseTimes: [],
+                  };
+                }
+                dayGroups[dayStr].aggregatedQA[question].answers.push(entry.answer);
+                dayGroups[dayStr].aggregatedQA[question].responseTimes.push(entry.response_time);
               });
             });
-          }
-          // Create one event per day for this module.
+          });
           Object.entries(dayGroups).forEach(([dayStr, groupData]) => {
             const repTimeISO = groupData.representativeTime.toISOString();
             eventList.push({
               title: `${modData.module_name} - ${dayStr}`,
               start: repTimeISO,
-              end: repTimeISO,
               color,
               textColor: "#fff",
               extendedProps: {
                 extractedStudyId: participantId,
                 moduleName: modData.module_name,
-                // For grouped events, we aggregate all QA data for that day
                 details: groupData.aggregatedQA,
                 responseTime: repTimeISO,
                 type: "structured",
-              } as ExtendedEventProps,
+              },
             });
           });
         }
       });
     });
-
     return eventList;
   }, [data]);
-
-  const handleEventClick = (clickInfo: EventClickArg) => {
-    setSelectedEvent(clickInfo.event.extendedProps as ExtendedEventProps);
-    setModalOpen(true);
-  };
 
   return (
     <div className={styles.wrapper}>
       <FullCalendar
+        key={JSON.stringify(notes)} // re-render when notes update
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
         initialView="dayGridMonth"
         headerToolbar={{
@@ -194,12 +225,83 @@ const CalendarView: React.FC<CalendarViewProps> = ({ data }) => {
         }}
         events={events}
         height="80vh"
-        eventClick={handleEventClick}
+        eventClick={(e: EventClickArg) => {
+          setSelectedEvent(e.event.extendedProps as ExtendedEventProps);
+          setModalOpen(true);
+        }}
+        dayCellContent={(arg) => {
+          const dateStr = arg.date.toISOString().split("T")[0];
+          const dayNotes = notes[dateStr] || {};
+          const noteEntries = Object.entries(dayNotes);
+          return (
+            <div className={styles.dayCellContent}>
+              <div className={styles.dayNumber}>{arg.dayNumberText}</div>
+              {/* + Note button is now handled via CSS hover */}
+              <button
+                className={styles.addNoteButton}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedDate(dateStr);
+                  setNoteModalOpen(true);
+                }}
+              >
+                + Note
+              </button>
+              {/* Display saved notes */}
+              {noteEntries.length > 0 && (
+                <div className={styles.note}>
+                  {noteEntries.map(([userKey, noteText]) => (
+                    <div
+                      key={userKey}
+                      className={styles.noteEntry}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedViewerNote({ user: userKey, note: noteText });
+                        setSelectedDate(dateStr);
+                        setViewerModalOpen(true);
+                      }}
+                    >
+                      <span>Additional note for {userKey}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }}
       />
+
       <EventDetail
         isOpen={isModalOpen}
         onClose={() => setModalOpen(false)}
         eventData={selectedEvent || null}
+      />
+
+      <NoteModal
+        isOpen={noteModalOpen}
+        onClose={() => setNoteModalOpen(false)}
+        onSave={(user: string, note: string) => {
+          if (selectedDate) {
+            saveNote(user, selectedDate, note);
+            setNoteModalOpen(false);
+          }
+        }}
+        users={allUsers}
+        selectedDate={selectedDate}
+      />
+
+      <NoteViewerModal
+        isOpen={viewerModalOpen}
+        onClose={() => setViewerModalOpen(false)}
+        user={selectedViewerNote?.user || ""}
+        note={selectedViewerNote?.note || ""}
+        date={selectedDate || ""}
+        onDelete={() => {
+          if (selectedDate && selectedViewerNote?.user) {
+            deleteNote(selectedViewerNote.user, selectedDate);
+            setViewerModalOpen(false);
+          }
+        }}
       />
     </div>
   );

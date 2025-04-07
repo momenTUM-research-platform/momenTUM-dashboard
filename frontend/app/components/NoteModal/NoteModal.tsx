@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from "react";
+import ReactDOM from "react-dom";
 import styles from "./NoteModal.module.css";
 
 const NoteModal = ({ isOpen, onClose, onSave, users, selectedDate }: any) => {
   const [note, setNote] = useState("");
   const [user, setUser] = useState(users[0] || "");
 
-  // Update the selected user if the users list changes
   useEffect(() => {
     setUser(users[0] || "");
   }, [users]);
 
   if (!isOpen) return null;
 
-  return (
+  return ReactDOM.createPortal(
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <button className={styles.closeButton} onClick={onClose}>
+          x
+        </button>
         <h3>Add Note for {selectedDate}</h3>
         <label className={styles.label}>User</label>
         <select
@@ -38,7 +41,8 @@ const NoteModal = ({ isOpen, onClose, onSave, users, selectedDate }: any) => {
           Save Note
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
