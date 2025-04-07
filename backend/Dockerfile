@@ -1,12 +1,17 @@
+# Use a slim Python image for development
 FROM python:3.10-slim
+
 WORKDIR /app
 
-# Copy and install Python dependencies
+# Install netcat-openbsd for wait-for-service logic
+RUN apt-get update && apt-get install -y netcat-openbsd && apt-get clean
+
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code including the entrypoint and init_db script
+# Copy source code
 COPY . .
 
-# Set the entrypoint
-CMD ["./entrypoint.sh"] 
+# Entrypoint
+CMD ["./entrypoint.sh"]

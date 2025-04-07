@@ -75,3 +75,11 @@
   color: #fff;
   border-color: #2d3748;
 }
+
+.collapseToggle {
+  margin-left: 0.5rem;
+  cursor: pointer;
+  display: inline-flex;
+  vertical-align: middle;
+  color: #718096; /* subtle gray */
+}

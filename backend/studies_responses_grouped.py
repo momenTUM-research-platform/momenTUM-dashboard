@@ -30,7 +30,7 @@ def convert_object_ids(obj):
 @router.get("/studies_responses_grouped/{study_id}")
 def get_grouped_study_responses(study_id: str):
     try:
-        # Fetch responses matching study_id (either in "raw" or explicit field)
+        # Fetch responses
         pattern = rf'"study_id":"{study_id}"'
         regex = re.compile(pattern)
         query = {"$or": [{"raw": {"$regex": regex}}, {"study_id": study_id}]}
@@ -41,7 +41,6 @@ def get_grouped_study_responses(study_id: str):
         parsed_responses = []
         encountered_module_ids = set()
 
-        # Parse each response document, updating from "raw" if present.
         for doc in response_docs:
             if "raw" in doc and isinstance(doc["raw"], str):
                 try:
@@ -53,12 +52,10 @@ def get_grouped_study_responses(study_id: str):
             if "module_id" in doc:
                 encountered_module_ids.add(doc["module_id"])
 
-        # Fetch study documents with matching study_id in properties.
         matching_studies = list(studies_collection.find({"properties.study_id": study_id}))
         if not matching_studies:
             raise HTTPException(status_code=404, detail=f"No study documents found for study_id {study_id}")
 
-        # Build a mapping: module_id → latest study_doc that contains it.
         module_to_study_map = {}
         for mod_id in encountered_module_ids:
             studies_with_module = [
@@ -70,7 +67,6 @@ def get_grouped_study_responses(study_id: str):
 
         grouped = {}
 
-        # Group responses by user_id.
         for doc in parsed_responses:
             user_id = doc.get("user_id", "unknown")
             mod_id = doc.get("module_id") or "unknown_module"
@@ -112,7 +108,11 @@ def get_grouped_study_responses(study_id: str):
                         q_id = q.get("id")
                         q_text = q.get("text", "No question text")
                         if q_id and q_id in responses_data:
-                            grouped[user_id][mod_id]["sections"][sec_key]["qa"][q_text] = responses_data[q_id]
+                            answer = responses_data[q_id]
+                            answer_entry = {"answer": answer, "response_time": response_time}
+                            if q_text not in grouped[user_id][mod_id]["sections"][sec_key]["qa"]:
+                                grouped[user_id][mod_id]["sections"][sec_key]["qa"][q_text] = []
+                            grouped[user_id][mod_id]["sections"][sec_key]["qa"][q_text].append(answer_entry)
             else:
                 if "unknown_module" not in grouped[user_id]:
                     grouped[user_id]["unknown_module"] = {
@@ -121,21 +121,23 @@ def get_grouped_study_responses(study_id: str):
                     }
                 grouped[user_id]["unknown_module"]["raw_responses"].append(doc)
 
-        # --- New: Extract Study ID for each user ---
-        # For each user, scan through modules to find one with module_name "Study ID"
-        # and extract its answer from section "0" (if available)
+        # Extract Study ID for each user
         for user_id, modules in grouped.items():
             extracted_study_id = None
             for key, mod in modules.items():
-                # Skip if this is our extra field already
                 if key == "extracted_study_id":
                     continue
                 if mod.get("module_name", "").strip() == "Study ID" and "sections" in mod:
                     section0 = mod["sections"].get("0")
                     if section0 and section0.get("qa"):
-                        answers = list(section0["qa"].values())
-                        if len(answers) > 0:
-                            extracted_study_id = str(answers[0]).strip()
+                        answers = []
+                        for ans in section0["qa"].values():
+                            if isinstance(ans, list):
+                                answers.extend(ans)
+                            else:
+                                answers.append(ans)
+                        if answers:
+                            extracted_study_id = str(answers[0].get("answer") or answers[0]).strip()
                             break
             modules["extracted_study_id"] = extracted_study_id or "Unknown"
 

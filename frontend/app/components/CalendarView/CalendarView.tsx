@@ -8,11 +8,12 @@ import interactionPlugin from "@fullcalendar/interaction";
 import EventDetail, { ExtendedEventProps } from "../EventDetail/EventDetail";
 import styles from "./CalendarView.module.css";
 
-// --- Types (from TableView) ---
+// --- Types ---
 export interface GroupedBySection {
   section_name: string;
-  qa: Record<string, any>;
-  response_time: string;
+  // Each question maps to an array of responses,
+  // where each response object has an answer and a response_time.
+  qa: Record<string, { answer: any; response_time: string }[]>;
 }
 
 export interface GroupedByModule {
@@ -27,7 +28,7 @@ export interface GroupedResponses {
     [moduleId: string]:
       | GroupedByModule
       | { module_name: string; raw_responses: any[] }
-      | any; // may include a primitive like extracted_study_id
+      | any; // may include extra primitive like extracted_study_id
   } & { extracted_study_id?: string };
 }
 
@@ -36,8 +37,7 @@ export interface StudyData {
   grouped_responses: GroupedResponses;
 }
 
-// Extended event properties
-// (Matches what's used in EventDetail)
+// Utility: Generate a hash code for a string (used for color selection)
 function hashCode(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -55,14 +55,14 @@ const colorPalette = [
   "#dd6b20",
 ];
 
-// Return a color from the palette based on the participant id
+// Returns a color from the palette based on the participant ID.
 function getColorForParticipant(participantId: string): string {
   const index = Math.abs(hashCode(participantId)) % colorPalette.length;
   return colorPalette[index];
 }
 
-// Helper to extract participant’s study ID
-// or fall back to userId if `extracted_study_id` is missing
+// Helper to extract participant’s study ID from the modules.
+// If an "extracted_study_id" property exists, use it; otherwise, fall back to the userId.
 function getExtractedStudyId(
   userId: string,
   modules: GroupedResponses[string]
@@ -79,9 +79,7 @@ interface CalendarViewProps {
 }
 
 const CalendarView: React.FC<CalendarViewProps> = ({ data }) => {
-  const [selectedEvent, setSelectedEvent] = useState<ExtendedEventProps | null>(
-    null
-  );
+  const [selectedEvent, setSelectedEvent] = useState<ExtendedEventProps | null>(null);
   const [isModalOpen, setModalOpen] = useState(false);
 
   const events = useMemo(() => {
@@ -89,15 +87,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({ data }) => {
 
     Object.entries(data.grouped_responses).forEach(([userId, modules]) => {
       const participantId = getExtractedStudyId(userId, modules);
-      // Choose a color for all events from this participant
       const color = getColorForParticipant(participantId);
 
       Object.entries(modules).forEach(([moduleId, moduleData]) => {
-        // skip the "extracted_study_id" property itself
-        if (moduleId === "extracted_study_id") return;
-        if (typeof moduleData !== "object" || moduleData === null) return;
+        // Skip non-object values (e.g. the extracted_study_id field)
+        if (moduleId === "extracted_study_id" || typeof moduleData !== "object" || moduleData === null)
+          return;
 
-        // Case 1: raw_responses
+        // CASE 1: Raw responses – each response becomes its own event.
         if ("raw_responses" in moduleData) {
           const fallback = moduleData as { module_name: string; raw_responses: any[] };
           fallback.raw_responses.forEach((resp) => {
@@ -106,42 +103,73 @@ const CalendarView: React.FC<CalendarViewProps> = ({ data }) => {
                 title: `${fallback.module_name} (raw)`,
                 start: new Date(resp.response_time).toISOString(),
                 end: new Date(resp.response_time).toISOString(),
-                color, // sets background & border
+                color,
                 textColor: "#fff",
                 extendedProps: {
                   extractedStudyId: participantId,
                   moduleName: fallback.module_name,
                   details: resp,
+                  responseTime: resp.response_time,
                   type: "raw",
-                },
+                } as ExtendedEventProps,
               });
             }
           });
-        } 
-        // Case 2: structured module with sections
-        else {
+        } else {
+          // CASE 2: Structured module with sections containing QA arrays.
+          // Instead of aggregating everything into one event,
+          // group answers by calendar day.
           const modData = moduleData as GroupedByModule;
+          const dayGroups: {
+            [day: string]: {
+              aggregatedQA: Record<string, { answers: any[]; responseTimes: string[] }>;
+              representativeTime: Date;
+            };
+          } = {};
           if (modData.sections) {
-            Object.entries(modData.sections).forEach(([sectionKey, section]) => {
-              if (section.response_time) {
-                eventList.push({
-                  title: `${modData.module_name} - ${section.section_name}`,
-                  start: new Date(section.response_time).toISOString(),
-                  end: new Date(section.response_time).toISOString(),
-                  color,
-                  textColor: "#fff",
-                  extendedProps: {
-                    extractedStudyId: participantId,
-                    moduleName: modData.module_name,
-                    sectionName: section.section_name,
-                    responseTime: section.response_time,
-                    details: section.qa,
-                    type: "structured",
-                  },
+            Object.values(modData.sections).forEach((section) => {
+              Object.entries(section.qa).forEach(([question, responses]) => {
+                if (!Array.isArray(responses)) return;
+                responses.forEach((entry) => {
+                  const dt = new Date(entry.response_time);
+                  const dayStr = dt.toISOString().split("T")[0]; // e.g. "2025-04-07"
+                  if (!dayGroups[dayStr]) {
+                    dayGroups[dayStr] = {
+                      aggregatedQA: {},
+                      representativeTime: dt,
+                    };
+                  }
+                  if (dt < dayGroups[dayStr].representativeTime) {
+                    dayGroups[dayStr].representativeTime = dt;
+                  }
+                  if (!(question in dayGroups[dayStr].aggregatedQA)) {
+                    dayGroups[dayStr].aggregatedQA[question] = { answers: [], responseTimes: [] };
+                  }
+                  dayGroups[dayStr].aggregatedQA[question].answers.push(entry.answer);
+                  dayGroups[dayStr].aggregatedQA[question].responseTimes.push(entry.response_time);
                 });
-              }
+              });
             });
           }
+          // Create one event per day for this module.
+          Object.entries(dayGroups).forEach(([dayStr, groupData]) => {
+            const repTimeISO = groupData.representativeTime.toISOString();
+            eventList.push({
+              title: `${modData.module_name} - ${dayStr}`,
+              start: repTimeISO,
+              end: repTimeISO,
+              color,
+              textColor: "#fff",
+              extendedProps: {
+                extractedStudyId: participantId,
+                moduleName: modData.module_name,
+                // For grouped events, we aggregate all QA data for that day
+                details: groupData.aggregatedQA,
+                responseTime: repTimeISO,
+                type: "structured",
+              } as ExtendedEventProps,
+            });
+          });
         }
       });
     });
