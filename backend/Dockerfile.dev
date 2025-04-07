@@ -3,15 +3,15 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install netcat for wait-for-postgres logic
-RUN apt-get update && apt-get install -y netcat && apt-get clean
+# Install netcat-openbsd for wait-for-service logic
+RUN apt-get update && apt-get install -y netcat-openbsd && apt-get clean
 
-# Copy and install Python dependencies
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the source code
+# Copy source code
 COPY . .
 
-# Use the entrypoint script to start your app (ensure it has executable permissions)
+# Entrypoint
 CMD ["./entrypoint.sh"]
