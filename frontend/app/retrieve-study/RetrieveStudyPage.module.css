@@ -12,11 +12,12 @@
   gap: 1rem;
   margin-bottom: 1.5rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .inputWrapper {
   position: relative;
-  flex: 1 0 100%;
+  flex: 1 0 80%;
   min-width: 0;
 }
 
