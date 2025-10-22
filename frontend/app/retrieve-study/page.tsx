@@ -1,33 +1,34 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import StudyResultsView from "../components/StudyResultsView/StudyResultsView";
+import { useEffect, useState } from "react";
+import StudyResultsViewV2 from "../components/StudyResultsViewV2/StudyResultsViewV2";
 import styles from "./RetrieveStudyPage.module.css";
 
 export default function RetrieveStudyPage() {
   const [studyQuery, setStudyQuery] = useState("");
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null);
+
+  const [loading, setLoading] = useState(false); // used for the search button UX
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<{ study_id: string; name: string }[]>([]);
   const [saveMessage, setSaveMessage] = useState("");
   const [token, setToken] = useState<string | null>(null);
 
-  // Set token from localStorage on mount
+  // Load token from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
       setToken(localStorage.getItem("token"));
     }
   }, []);
 
-  // Fetch suggestions (debounced)
+  // Debounced study suggestions
   useEffect(() => {
     const handler = setTimeout(() => {
       if (studyQuery.length > 2) {
         fetch(`/api/studies_suggestions?query=${encodeURIComponent(studyQuery)}`)
           .then((res) => res.json())
           .then((data) => setSuggestions(data))
-          .catch((err) => console.error("Error fetching suggestions", err));
+          .catch(() => setSuggestions([]));
       } else {
         setSuggestions([]);
       }
@@ -35,37 +36,28 @@ export default function RetrieveStudyPage() {
     return () => clearTimeout(handler);
   }, [studyQuery]);
 
-  // Handle search form submission
+  // Select study and let the V2 view fetch/render results
   const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
-    setData(null);
     setSaveMessage("");
+    setLoading(true);
     try {
-      const res = await fetch(`/api/studies_responses_grouped/${studyQuery}`);
-      if (!res.ok) {
-        const errData = await res.json();
-        setError(errData.detail || "Error fetching study data");
-      } else {
-        const jsonData = await res.json();
-        setData(jsonData);
-      }
-    } catch (err) {
-      setError("Error fetching study data");
+      setSelectedStudyId(studyQuery.trim());
+    } catch {
+      setError("Could not select study.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Save the current study (data.study_id) to the user's profile.
+  // Save selected study to user profile
   const handleSaveStudy = async () => {
     if (!token) {
       setSaveMessage("No token available.");
       return;
     }
-    const studyToSave = data?.study_id;
-    if (!studyToSave) {
+    if (!selectedStudyId) {
       setSaveMessage("No study to save.");
       return;
     }
@@ -76,26 +68,27 @@ export default function RetrieveStudyPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ study_ids: [studyToSave] }),
+        body: JSON.stringify({ study_ids: [selectedStudyId] }),
       });
       if (!res.ok) {
-        const errData = await res.json();
-        const errorMessage =
+        const errData = await res.json().catch(() => ({}));
+        const message =
           typeof errData.detail === "string"
             ? errData.detail
-            : JSON.stringify(errData.detail);
-        setSaveMessage(errorMessage || "Error saving study");
+            : JSON.stringify(errData.detail ?? {});
+        setSaveMessage(message || "Error saving study.");
       } else {
         setSaveMessage("Study saved successfully!");
       }
-    } catch (err) {
-      setSaveMessage("Error saving study");
+    } catch {
+      setSaveMessage("Error saving study.");
     }
   };
 
   return (
     <div className={styles.container}>
       <h1>Retrieve Study Responses</h1>
+
       <form onSubmit={handleSearch} className={styles.searchForm}>
         <div className={styles.inputWrapper}>
           <input
@@ -114,7 +107,7 @@ export default function RetrieveStudyPage() {
                   key={`${s.study_id}-${idx}`}
                   className={styles.dropdownItem}
                   onMouseDown={(e) => {
-                    e.preventDefault(); // Prevents input blur and layout issues
+                    e.preventDefault();
                     setStudyQuery(s.study_id);
                     setSuggestions([]);
                   }}
@@ -125,13 +118,15 @@ export default function RetrieveStudyPage() {
             </ul>
           )}
         </div>
-        <button type="submit" className={styles.button}>
-          Search
+
+        <button type="submit" className={styles.button} disabled={loading}>
+          {loading ? "Selecting..." : "Search"}
         </button>
       </form>
-      {loading && <p>Loading study responses...</p>}
+
       {error && <p className={styles.error}>Error: {error}</p>}
-      {data && (
+
+      {selectedStudyId && (
         <>
           <div className={styles.saveStudy}>
             <button onClick={handleSaveStudy} className={styles.button}>
@@ -139,7 +134,8 @@ export default function RetrieveStudyPage() {
             </button>
             {saveMessage && <p className={styles.saveMessage}>{saveMessage}</p>}
           </div>
-          <StudyResultsView data={data} />
+
+          <StudyResultsViewV2 studyId={selectedStudyId} />
         </>
       )}
     </div>

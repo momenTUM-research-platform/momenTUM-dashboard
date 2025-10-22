@@ -1,0 +1,122 @@
+.root {
+    display: grid;
+    gap: 1.5rem;
+  }
+  
+  /* toolbar: view toggle + actions + count */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    padding: .75rem;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: .75rem;
+  }
+  
+  /* segmented toggle */
+  .segment {
+    display: inline-flex;
+    border: 1px solid #e5e7eb;
+    border-radius: .5rem;
+    overflow: hidden;
+    background: #fff;
+  }
+  .segmentBtn {
+    padding: .5rem .75rem;
+    font-size: .875rem;
+    line-height: 1.25rem;
+    border: 0;
+    background: #fff;
+    color: #374151;
+    cursor: pointer;
+  }
+  .segmentBtn + .segmentBtn {
+    border-left: 1px solid #e5e7eb;
+  }
+  .segmentBtnActive {
+    background: #111827;
+    color: #fff;
+  }
+  
+  /* action buttons */
+  .btn {
+    padding: .5rem .75rem;
+    font-size: .875rem;
+    line-height: 1.25rem;
+    border: 1px solid #d1d5db;
+    border-radius: .5rem;
+    background: #fff;
+    color: #111827;
+    cursor: pointer;
+  }
+  .btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+  }
+  .btn:hover:not(:disabled) {
+    background: #f3f4f6;
+  }
+  
+  /* right-side count */
+  .count {
+    margin-left: auto;
+    font-size: .875rem;
+    color: #4b5563;
+  }
+  
+  /* filters grid */
+  .filters {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  @media (min-width: 768px) {
+    .filters {
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+  }
+  
+  .field label {
+    display: block;
+    font-size: .875rem;
+    font-weight: 600;
+    margin-bottom: .25rem;
+    color: #111827;
+  }
+  .input {
+    width: 100%;
+    padding: .5rem .75rem;
+    border: 1px solid #d1d5db;
+    border-radius: .5rem;
+    background: #fff;
+  }
+  .help {
+    margin-top: .25rem;
+    font-size: .75rem;
+    color: #6b7280;
+  }
+  
+  /* table pager */
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem;
+    border: 1px solid #e5e7eb;
+    border-radius: .5rem;
+    background: #fff;
+  }
+  
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .75rem;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 9999px;
+    padding: .125rem .5rem;
+  }
