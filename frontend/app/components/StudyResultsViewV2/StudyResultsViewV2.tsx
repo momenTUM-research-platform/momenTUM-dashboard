@@ -14,6 +14,7 @@ import { LabeledSurveyResponseOut } from "@/app/types/schemas";
 import TableViewV2 from "@/app/components/TableViewV2/TableViewV2";
 import CalendarViewV2 from "@/app/components/CalendarViewV2/CalendarViewV2";
 import SleepVizPanel from "@/app/components/SleepViz/SleepVizPanel";
+import AdherencePanel from "../AdherencePanel/AdherencePanel";
 import styles from "./StudyResultsViewV2.module.css";
 
 type Props = { studyId: string };
@@ -43,7 +44,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
   const [userMap, setUserMap] = useState<Record<string, string> | null>(null);
 
   // view + paging
-  const [activeView, setActiveView] = useState<"table" | "calendar" | "visualize">("table");
+  const [activeView, setActiveView] = useState<"table" | "calendar" | "visualize" | "adherence">("table");
   const [page, setPage] = useState(1);
   const TABLE_PAGE_SIZE = 100;
   const CALENDAR_LIMIT = 5000;
@@ -214,6 +215,15 @@ export default function StudyResultsViewV2({ studyId }: Props) {
             className={`${styles.segmentBtn} ${activeView === "visualize" ? styles.segmentBtnActive : ""}`}
           >
             Visualize
+          </button>
+
+          <button
+            role="tab"
+            aria-selected={activeView === "adherence"}
+            onClick={() => setActiveView("adherence")}
+            className={`${styles.segmentBtn} ${activeView === "adherence" ? styles.segmentBtnActive : ""}`}
+          >
+            Adherence
           </button>
         </div>
 
@@ -438,7 +448,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
               mapping={userMap ?? undefined}
               mappingName={selectedQuestion?.question_text || "Mapped ID"}
             />
-          ) : (
+          ) : activeView === "visualize" ? (
             <SleepVizPanel
               studyId={studyId}
               userIds={userIds.length ? userIds : undefined}
@@ -446,7 +456,17 @@ export default function StudyResultsViewV2({ studyId }: Props) {
               to={to || undefined}
               mapping={userMap ?? undefined}
               mappingName={selectedQuestion?.question_text || "Mapped ID"}
-          />
+            />
+          ) : (
+            // adherence
+            <AdherencePanel
+              studyId={studyId}
+              userIds={userIds.length ? userIds : undefined}
+              from={from ? from.slice(0,10) : undefined} // pass Y-M-D; panel normalizes both
+              to={to ? to.slice(0,10) : undefined}
+              mapping={userMap ?? undefined}
+              mappingName={selectedQuestion?.question_text || "Mapped ID"}
+            />
           )}
 
           {activeView === "table" && (

@@ -335,18 +335,19 @@ function RoleSelect(props: {
   );
 }
 
-/** SleepRibbon: “night window” */
+/** SleepRibbon: “night window” with median overlays */
 function SleepRibbon({
   data,
   mapping,
   mappingName = "Mapped ID",
   durationBands = { shortMaxMin: 360, longMinMin: 540 }, // <6h short, >9h long
+  showOverlay = true,
 }: {
   data: SleepRow[];
   mapping?: Record<string, string>;
   mappingName?: string;
-  /** thresholds in minutes: short < shortMaxMin, normal in [shortMaxMin, longMinMin], long > longMinMin */
   durationBands?: { shortMaxMin: number; longMinMin: number };
+  showOverlay?: boolean;
 }) {
   // Duration categories (fill color)
   const DUR_COLORS = {
@@ -361,6 +362,7 @@ function SleepRibbon({
     if (mins > durationBands.longMinMin) return "long" as const;
     return "normal" as const;
   };
+
   const ref = useRef<HTMLDivElement | null>(null);
   const [w, setW] = useState(900);
   useEffect(() => {
@@ -371,10 +373,16 @@ function SleepRibbon({
     return () => ro.disconnect();
   }, []);
 
-  // display helper
   const displayId = (uid: string) => mapping?.[uid] ?? uid;
+  const timeToMins = (d: Date) => d.getHours() * 60 + d.getMinutes();
+  const median = (nums: number[]) => {
+    if (!nums.length) return null;
+    const a = [...nums].sort((x, y) => x - y);
+    const mid = Math.floor(a.length / 2);
+    return a.length % 2 ? a[mid] : Math.round((a[mid - 1] + a[mid]) / 2);
+  };
 
-  // Group by raw user (stable); only change the label via mapping
+  // Group by user
   const byUser = useMemo(() => {
     const m = new Map<string, SleepRow[]>();
     for (const r of data) {
@@ -396,18 +404,19 @@ function SleepRibbon({
   const START_MIN = 20 * 60;  // 1200
   const END_MIN = 38 * 60;    // 2280
   const MINUTES_SPAN = END_MIN - START_MIN; // 1080
-  const xForMin = (m: number) => ((m - START_MIN + 1440) % 1440) / MINUTES_SPAN * PLOT_W;
+  const xForMin = (m: number) =>
+    ((m - START_MIN + 1440) % 1440) / MINUTES_SPAN * PLOT_W;
 
   const toSegs = (bt?: Date | null, rt?: Date | null) => {
     if (!bt || !rt) return [];
-    let start = bt.getHours() * 60 + bt.getMinutes();
-    let end = rt.getHours() * 60 + rt.getMinutes();
+    let start = timeToMins(bt);
+    let end = timeToMins(rt);
     if (end < start) end += 24 * 60; // cross midnight
 
     const segs: Array<{ s: number; e: number }> = [];
     const clamp = (v: number) => Math.min(END_MIN, Math.max(START_MIN, v));
 
-    const S = start < START_MIN ? start + 1440 : start; // shift into [1080, 2520)
+    const S = start < START_MIN ? start + 1440 : start; // shift into [START, START+1440)
     const E = end   < START_MIN ? end   + 1440 : end;
 
     const overlapS = clamp(Math.max(S, START_MIN));
@@ -427,7 +436,7 @@ function SleepRibbon({
     { t: 38 * 60, label: "14:00" },
   ];
 
-  // simple, consistent color by mapped label (or user fallback)
+  // consistent color by mapped label (or user fallback)
   const colors = ["#0ea5e9","#22c55e","#f59e0b","#ef4444","#8b5cf6","#14b8a6","#f97316","#06b6d4"];
   const colorFor = (uid: string) => {
     const key = displayId(uid);
@@ -443,13 +452,56 @@ function SleepRibbon({
         const showRaw = pretty !== user;
         const userColor = colorFor(user);
 
+        // per-user medians
+        const bedMins = rows
+          .map(r => r.bedtime)
+          .filter((d): d is Date => !!d)
+          .map(timeToMins);
+        const riseMins = rows
+          .map(r => r.risetime)
+          .filter((d): d is Date => !!d)
+          .map(timeToMins);
+        const durMins = rows
+          .map(r => r.durationMin)
+          .filter((n): n is number => n != null);
+
+        const medBed = median(bedMins);
+        const medRise = median(riseMins);
+        const medDur = median(durMins); // not printed, used for the band width
+
+        const xMedBed  = medBed  == null ? null : LEFT_LABEL_W + xForMin(medBed);
+        const xMedRise = medRise == null ? null : LEFT_LABEL_W + xForMin(medRise);
+
+        const svgH = rows.length * (HROW + GAP) + 6;
+
+        // median band rectangles (handles midnight wrap)
+        const bandRects: Array<{x:number; w:number}> = [];
+        if (medBed != null && medRise != null) {
+          const B = medBed  < START_MIN ? medBed  + 1440 : medBed;
+          const R = medRise < START_MIN ? medRise + 1440 : medRise;
+          const segs =
+            R >= B
+              ? [{ s: B, e: R }]
+              : [{ s: B, e: END_MIN }, { s: START_MIN, e: R }];
+          segs.forEach(({ s, e }) => {
+            const x = LEFT_LABEL_W + xForMin(s);
+            const w = Math.max(1, xForMin(e) - xForMin(s));
+            bandRects.push({ x, w });
+          });
+        }
+
         return (
           <div key={user} className={styles.userBlock}>
             <div className={styles.userHeader}>
               <div className={styles.userChip} style={{ borderColor: userColor, color: userColor }}>
                 {pretty}
               </div>
-              {showRaw && <div className={styles.userSub}>{mappingName}: <code>{pretty}</code> <span className={styles.rawGray}>({user})</span></div>}
+              {showRaw && (
+                <div className={styles.userSub}>
+                  {mappingName}: <code>{pretty}</code>{" "}
+                  <span className={styles.rawGray}>({user})</span>
+                </div>
+              )}
               {!showRaw && <div className={styles.userSub}><code>{user}</code></div>}
             </div>
 
@@ -474,23 +526,32 @@ function SleepRibbon({
                 </div>
               </div>
 
+              {/* duration legend + overlay legend */}
               <div className={styles.durationLegend}>
                 <span className={styles.legendItem}>
-                  <span className={styles.swatch} style={{ background: DUR_COLORS.short }} /> Short (&lt;{Math.round(durationBands.shortMaxMin/60)}h)
+                  <span className={styles.swatch} style={{ background: "#ef4444" }} /> Short (&lt;{Math.round(durationBands.shortMaxMin/60)}h)
                 </span>
                 <span className={styles.legendItem}>
-                  <span className={styles.swatch} style={{ background: DUR_COLORS.normal }} /> Normal ({Math.round(durationBands.shortMaxMin/60)}–{Math.round(durationBands.longMinMin/60)}h)
+                  <span className={styles.swatch} style={{ background: "#22c55e" }} /> Normal ({Math.round(durationBands.shortMaxMin/60)}–{Math.round(durationBands.longMinMin/60)}h)
                 </span>
                 <span className={styles.legendItem}>
-                  <span className={styles.swatch} style={{ background: DUR_COLORS.long }} /> Long (&gt;{Math.round(durationBands.longMinMin/60)}h)
+                  <span className={styles.swatch} style={{ background: "#f59e0b" }} /> Long (&gt;{Math.round(durationBands.longMinMin/60)}h)
                 </span>
                 <span className={styles.legendItem}>
-                  <span className={styles.swatch} style={{ background: DUR_COLORS.missing }} /> Missing
+                  <span className={styles.swatch} style={{ background: "#9ca3af" }} /> Missing
                 </span>
+                {showOverlay && (
+                  <span className={`${styles.legendItem} ${styles.overlayLegend}`}>
+                    <span className={styles.swatch} style={{ background: "#11182710", boxShadow: "none", border: "1px dashed #11182740" }} />
+                    Median band &nbsp;|&nbsp;
+                    <span className={styles.swatch} style={{ background: "transparent", boxShadow: "none", border: "1px dashed #111827" }} />
+                    Median bedtime/risetime
+                  </span>
+                )}
               </div>
 
-              {/* grid + bars */}
-              <svg width={LEFT_LABEL_W + PLOT_W} height={rows.length * (HROW + GAP) + 6}>
+              {/* grid + bars + overlay */}
+              <svg width={LEFT_LABEL_W + PLOT_W} height={svgH}>
                 {/* grid lines */}
                 {ticks.map((tk, i) => (
                   <line
@@ -498,12 +559,28 @@ function SleepRibbon({
                     x1={LEFT_LABEL_W + xForMin(tk.t)}
                     y1={0}
                     x2={LEFT_LABEL_W + xForMin(tk.t)}
-                    y2={rows.length * (HROW + GAP) + 6}
+                    y2={svgH}
                     stroke="#e5e7eb"
                     strokeWidth={1}
                   />
                 ))}
 
+                {/* median band (behind bars) */}
+                {showOverlay && bandRects.map((b, i) => (
+                  <rect
+                    key={`band-${i}`}
+                    x={b.x}
+                    y={0}
+                    width={b.w}
+                    height={svgH}
+                    fill="#11182710"
+                    stroke="#11182740"
+                    strokeDasharray="4 4"
+                    rx={2}
+                  />
+                ))}
+
+                {/* rows */}
                 {rows.map((r, i) => {
                   const y = i * (HROW + GAP) + 4;
                   const segs = toSegs(r.bedtime, r.risetime);
@@ -527,8 +604,13 @@ function SleepRibbon({
                             width={w}
                             height={HROW - 6}
                             rx={4}
-                            fill={DUR_COLORS[categoryForDuration(r.durationMin)]}
-                            stroke={userColor}
+                            fill={{
+                              short: "#ef4444",
+                              normal: "#22c55e",
+                              long: "#f59e0b",
+                              missing: "#9ca3af",
+                            }[categoryForDuration(r.durationMin)]}
+                            stroke={colorFor(r.user_id)}
                             strokeWidth={1}
                             opacity={0.95}
                           />
@@ -544,9 +626,7 @@ function SleepRibbon({
                         textAnchor="end"
                       >
                         {r.durationMin != null
-                          ? `${Math.round(r.durationMin / 60)}h${String(
-                              r.durationMin % 60
-                            ).padStart(2, "0")}m`
+                          ? `${Math.round(r.durationMin / 60)}h${String(r.durationMin % 60).padStart(2, "0")}m`
                           : "—"}
                         {r.awakenings != null ? ` · wakes:${r.awakenings}` : ""}
                         {r.napMinutes != null ? ` · naps:${r.napMinutes}m` : ""}
@@ -554,6 +634,30 @@ function SleepRibbon({
                     </g>
                   );
                 })}
+
+                {/* dashed median lines */}
+                {showOverlay && xMedBed != null && (
+                  <line
+                    x1={xMedBed}
+                    y1={0}
+                    x2={xMedBed}
+                    y2={svgH}
+                    stroke="#111827"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                  />
+                )}
+                {showOverlay && xMedRise != null && (
+                  <line
+                    x1={xMedRise}
+                    y1={0}
+                    x2={xMedRise}
+                    y2={svgH}
+                    stroke="#111827"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                  />
+                )}
               </svg>
             </div>
           </div>

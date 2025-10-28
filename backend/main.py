@@ -20,6 +20,7 @@ from studies_responses_grouped import router as responses_grouped
 from partial_search import router as partial_search_studies
 from routers.studies_responses_v2 import router as responses_v2_router
 from routers.studies_responses_labeled import router as responses_labeled_router
+from routers.adherence import router as adherence_router
 
 app = FastAPI()
 
@@ -30,6 +31,7 @@ app.include_router(responses_grouped, prefix="/api")
 app.include_router(partial_search_studies, prefix="/api")
 app.include_router(responses_v2_router, prefix="/api")
 app.include_router(responses_labeled_router, prefix="/api")
+app.include_router(adherence_router, prefix="/api")
 
 # Set up MongoDB connection (used only for the /api/studies endpoint).
 MONGO_URL = os.getenv("MONGO_URL")

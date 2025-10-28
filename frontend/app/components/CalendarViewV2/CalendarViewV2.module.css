@@ -59,3 +59,21 @@
   .a {
     color: #111827;
   }
+
+  .fcChip {
+    line-height: 1.2;
+  }
+  
+  .fcTitle {
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+  
+  .fcMeta {
+    font-size: 0.72rem;
+    opacity: 0.9;
+  }
+  
+  .modalBackdrop {
+    z-index: 9999;
+  }
