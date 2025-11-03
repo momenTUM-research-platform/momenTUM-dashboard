@@ -1,19 +1,189 @@
-/* frontend/app/components/AdherencePanel/AdherencePanel.module.css */
 .wrap {
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.05);
-    padding: 1rem;
-  }
-  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:.5rem; }
-  .help { font-size:.9rem; color:#6b7280; }
-  .err { color:#b91c1c; font-size:.9rem; }
-  .tableWrap { overflow:auto; }
-  .table { width:100%; border-collapse: collapse; }
-  .table th, .table td { border-bottom: 1px solid #e5e7eb; padding: .5rem .5rem; font-size:.9rem; }
-  .num { text-align: right; }
-  .modules { display:flex; flex-wrap:wrap; gap:.35rem; }
-  .modChip {
-    background:#f3f4f6; border:1px solid #e5e7eb; border-radius: 999px;
-    padding:.15rem .5rem; font-size:.8rem; white-space:nowrap;
-  }
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 14px rgba(0,0,0,.06);
+  padding: 1rem 1rem 1.25rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .75rem;
+}
+
+.h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.subtle {
+  margin: .25rem 0 0;
+  font-size: .85rem;
+  color: #6b7280;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: auto auto minmax(240px, 1fr);
+  gap: .75rem;
+  align-items: end;
+}
+
+.kpi, .kpiWide {
+  background: #f9fafb;
+  border: 1px solid #eef0f3;
+  border-radius: 10px;
+  padding: .5rem .65rem;
+}
+
+.kpi {
+  min-width: 120px;
+}
+.kpiWide {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .35rem .6rem;
+  align-items: center;
+}
+
+.kLabel {
+  font-size: .75rem;
+  color: #6b7280;
+}
+
+.kValue {
+  font-size: .95rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.kPct {
+  font-size: .9rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.help { font-size:.9rem; color:#6b7280; padding:.25rem 0; }
+.err { color:#b91c1c; font-size:.9rem; padding:.25rem 0; }
+
+/* cards grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: .85rem;
+  margin-top: .5rem;
+}
+
+.card {
+  border: 1px solid #eef0f3;
+  border-radius: 12px;
+  padding: .75rem .75rem .8rem;
+  background: #fff;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .4rem;
+}
+
+.user {
+  font-weight: 600;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counts {
+  font-variant-numeric: tabular-nums;
+  font-size: .9rem;
+  color: #111827;
+}
+.countNum { font-weight: 600; }
+.countSep { opacity: .5; padding: 0 .15rem; }
+.countDen { opacity: .9; }
+
+.progressRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+
+.progress {
+  position: relative;
+  height: 8px;
+  width: 100%;
+  background: #f3f4f6;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #eef0f3;
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width .25s ease;
+}
+
+/* per-module list */
+.modList {
+  display: grid;
+  gap: .45rem;
+}
+
+.modItem { display: grid; gap: .25rem; }
+
+.modTitle {
+  font-size: .85rem;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modBarWrap {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: .5rem;
+}
+
+.modBar {
+  position: relative;
+  height: 6px;
+  width: 100%;
+  background: #f5f6f8;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #eef0f3;
+}
+
+.modBarFill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width .25s ease;
+}
+
+.modCounts {
+  font-size: .8rem;
+  color: #374151;
+  font-variant-numeric: tabular-nums;
+}
+
+/* percentage color themes */
+.pctGood { background: #22c55e; } /* green-500 */
+.pctMid  { background: #f59e0b; } /* amber-500 */
+.pctLow  { background: #ef4444; } /* red-500 */
+
+/* small devices */
+@media (max-width: 480px) {
+  .kpis { grid-template-columns: 1fr; }
+}

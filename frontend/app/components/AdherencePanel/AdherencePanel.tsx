@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   fetchAdherenceExpected,
   fetchAdherenceStructureCount,
   OccurrenceOut,
   safeTZ,
   toYMD,
+  ModuleMeta,
 } from "@/app/lib/adherence";
 import {
   fetchLabeledResponses,
@@ -26,8 +27,8 @@ type Props = {
 type UserSummary = {
   user_id: string;
   label: string;
-  expected: number;   // from /structure-count.total
-  completed: number;  // matched hits within baseline window
+  expected: number;
+  completed: number;
   completion: number; // %
   perModule: Record<string, { module_name: string; expected: number; completed: number }>;
 };
@@ -35,7 +36,8 @@ type UserSummary = {
 function minDateISO(dates: string[]): Date | null {
   const ts = dates
     .map((s) => {
-      try { return new Date(s).getTime(); } catch { return NaN; }
+      const t = Date.parse(s);
+      return Number.isFinite(t) ? t : NaN;
     })
     .filter((n) => Number.isFinite(n)) as number[];
   if (!ts.length) return null;
@@ -48,6 +50,13 @@ function addDays(d: Date, n: number): Date {
   return x;
 }
 
+// visual class for progress (%)
+function pctClass(p: number) {
+  if (p >= 70) return styles.pctGood;
+  if (p >= 40) return styles.pctMid;
+  return styles.pctLow;
+}
+
 export default function AdherencePanel({
   studyId,
   userIds,
@@ -56,15 +65,18 @@ export default function AdherencePanel({
 }: Props) {
   const [rows, setRows] = useState<LabeledSurveyResponseOut[]>([]);
   const [facets, setFacets] = useState<Facets | null>(null);
+
+  const [studyDays, setStudyDays] = useState<number>(7);
   const [structureTotal, setStructureTotal] = useState<number>(0);
   const [structurePerModule, setStructurePerModule] = useState<Record<string, number>>({});
-  const [studyDays, setStudyDays] = useState<number>(7);
+  const [moduleMeta, setModuleMeta] = useState<Record<string, ModuleMeta>>({});
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<UserSummary[]>([]);
   const tz = safeTZ();
 
+  // Load ALL responses
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -84,53 +96,65 @@ export default function AdherencePanel({
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [studyId, JSON.stringify(userIds)]);
 
+  // Facets
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const f = await fetchFacets(studyId, {});
         if (!cancelled) setFacets(f);
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [studyId]);
 
+  // Structure + meta
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const sc = await fetchAdherenceStructureCount(studyId);
         if (!cancelled) {
+          setStudyDays(sc.study_days);
           setStructureTotal(sc.total);
           setStructurePerModule(sc.per_module || {});
-          setStudyDays(sc.study_days);
+          // @ts-ignore: meta is present in our backend response
+          setModuleMeta(sc.per_module_meta || {});
         }
-      } catch (e: any) {
+      } catch (e) {
         console.error("structure-count failed", e);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [studyId]);
 
-  // Summaries
+  // Summaries (unchanged logic)
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Users in scope
       const explicit = userIds && userIds.length ? userIds : [];
       const fromRows = Array.from(new Set(rows.map((r) => r.user_id)));
       const fromFacets = facets?.users ?? [];
-      const users = Array.from(new Set([...explicit, ...fromRows, ...fromFacets])).filter(Boolean);
+      const users = Array.from(new Set([...explicit, ...fromRows, ...fromFacets])).filter(
+        Boolean
+      );
 
       if (!users.length) {
         if (!cancelled) setSummary([]);
         return;
       }
 
-      // Build per-user earliest date & actual timestamps
       const earliestByUser: Record<string, Date> = {};
       const actualByUser: Record<string, Record<string, number[]>> = {};
 
@@ -141,9 +165,9 @@ export default function AdherencePanel({
           if (minD) earliestByUser[uid] = minD;
         }
       }
-
       for (const r of rows) {
-        const t = new Date(r.response_time as any).getTime();
+        const t = Date.parse(r.response_time as any);
+        if (!Number.isFinite(t)) continue;
         (actualByUser[r.user_id] ||= {});
         (actualByUser[r.user_id][r.module_id] ||= []).push(t);
       }
@@ -151,13 +175,12 @@ export default function AdherencePanel({
       const out: UserSummary[] = [];
 
       for (const uid of users) {
-        // If we don’t know baseline (no responses at all), skip summarizing this user
         const baseline = earliestByUser[uid];
         if (!baseline) continue;
 
-        const toDate = addDays(baseline, Math.max(1, studyDays) + 1); // +1 for safety/end marker
+        const endDate = addDays(baseline, Math.max(1, studyDays) + 1);
         const fromY = toYMD(baseline);
-        const toY = toYMD(toDate);
+        const toY = toYMD(endDate);
 
         let expectedOccs: OccurrenceOut[] = [];
         try {
@@ -166,51 +189,76 @@ export default function AdherencePanel({
             from: fromY,
             to: toY,
             tz,
-            userId: uid, 
+            userId: uid,
           });
         } catch {
           expectedOccs = [];
         }
 
-        const perModule: Record<string, { module_name: string; expected: number; completed: number }> = {};
-        let hitCount = 0;
-        const userActual = actualByUser[uid] || {};
-
-        // Use structure per-module counts as the expected ceiling
+        const perModule: Record<
+          string,
+          { module_name: string; expected: number; completed: number }
+        > = {};
         for (const [mid, expCount] of Object.entries(structurePerModule)) {
-          perModule[mid] = { module_name: mid, expected: expCount, completed: 0 };
+          perModule[mid] = {
+            module_name: moduleMeta[mid]?.module_name || mid,
+            expected: expCount,
+            completed: 0,
+          };
         }
 
-        // Tally completions within the participant’s window
+        const userActual = actualByUser[uid] || {};
+        let completedTotal = 0;
+
+        // NEVER modules: “ever” rule
+        for (const mid of Object.keys(perModule)) {
+          const mm = moduleMeta[mid];
+          if (mm && mm.repeat === "never") {
+            const hits = (userActual[mid] || []).length;
+            if (hits > 0) {
+              const inc = Math.min(hits, perModule[mid].expected || 1);
+              perModule[mid].completed = inc;
+              completedTotal += inc;
+            }
+          }
+        }
+
+        // DAILY modules: window matching
         for (const occ of expectedOccs) {
           const mid = occ.module_id;
-          const name = occ.module_name || mid;
+          const mm = moduleMeta[mid];
+          if (mm && mm.repeat === "never") {
+            // upgrade name if needed
+            if (perModule[mid] && perModule[mid].module_name === mid) {
+              perModule[mid].module_name = mm.module_name || occ.module_name || mid;
+            }
+            continue;
+          }
           if (!perModule[mid]) {
-            // include modules that weren’t in structure-count for any reason
-            perModule[mid] = { module_name: name, expected: 0, completed: 0 };
-          } else {
-            // preserve name if we have it
-            perModule[mid].module_name = name;
+            perModule[mid] = {
+              module_name: mm?.module_name || occ.module_name || mid,
+              expected: 0,
+              completed: 0,
+            };
+          } else if (perModule[mid].module_name === mid) {
+            perModule[mid].module_name = mm?.module_name || occ.module_name || mid;
           }
 
-          const startT = new Date(occ.start).getTime();
-          const endT = new Date(occ.end).getTime();
+          const startT = Date.parse(occ.start);
+          const endT = Date.parse(occ.end);
           const times = userActual[mid] || [];
-          const completed = times.some((t) => t >= startT && t <= endT);
-
-          // Only increment completed; expected comes from structure-count
-          if (completed) {
+          const hit = times.some((t) => t >= startT && t <= endT);
+          if (hit) {
             perModule[mid].completed += 1;
+            completedTotal += 1;
           }
         }
 
-        // Cap completed at expected per module (just in case)
         for (const v of Object.values(perModule)) {
           if (v.completed > v.expected) v.completed = v.expected;
         }
 
-        const expectedTotal = structureTotal || 0;
-        const completedTotal = Object.values(perModule).reduce((s, v) => s + v.completed, 0);
+        const expectedTotal = Object.values(perModule).reduce((s, v) => s + v.expected, 0);
         const completionPct = expectedTotal ? Math.round((completedTotal / expectedTotal) * 100) : 0;
 
         out.push({
@@ -229,60 +277,119 @@ export default function AdherencePanel({
       }
     })();
 
-    return () => { cancelled = true; };
-  }, [studyId, JSON.stringify(userIds), rows, facets, studyDays, JSON.stringify(structurePerModule), structureTotal, tz, JSON.stringify(mapping)]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    studyId,
+    JSON.stringify(userIds),
+    rows,
+    facets,
+    studyDays,
+    JSON.stringify(structurePerModule),
+    JSON.stringify(moduleMeta),
+    structureTotal,
+    tz,
+    JSON.stringify(mapping),
+  ]);
+
+  // small overall header stats (purely visual)
+  const overall = useMemo(() => {
+    if (!summary.length) return null;
+    const exp = summary.reduce((s, u) => s + u.expected, 0);
+    const done = summary.reduce((s, u) => s + u.completed, 0);
+    const pct = exp ? Math.round((done / exp) * 100) : 0;
+    return { participants: summary.length, exp, done, pct };
+  }, [summary]);
 
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
         <div>
-          <h3 className="text-xl font-semibold">Adherence</h3>
-          <p className="text-sm text-gray-600">
-            Study-wide adherence per participant (baseline → baseline + {studyDays} days). Labels use “{mappingName}” when available.
+          <h3 className={styles.h3}>Adherence</h3>
+          <p className={styles.subtle}>
+            Study-wide per participant (baseline → baseline + {studyDays} days). Labels use “{mappingName}”.
           </p>
         </div>
+        {overall && (
+          <div className={styles.kpis}>
+            <div className={styles.kpi}>
+              <div className={styles.kLabel}>Participants</div>
+              <div className={styles.kValue}>{overall.participants}</div>
+            </div>
+            <div className={styles.kpi}>
+              <div className={styles.kLabel}>Completed / Expected</div>
+              <div className={styles.kValue}>
+                {overall.done} / {overall.exp}
+              </div>
+            </div>
+            <div className={styles.kpiWide}>
+              <div className={styles.kLabel}>Overall</div>
+              <div className={styles.progress}>
+                <div
+                  className={`${styles.progressBar} ${pctClass(overall.pct)}`}
+                  style={{ width: `${overall.pct}%` }}
+                />
+              </div>
+              <div className={styles.kPct}>{overall.pct}%</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {loading && <div className={styles.help}>Loading…</div>}
       {error && <div className={styles.err}>{error}</div>}
 
-      {!loading && !error && (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Participant</th>
-                <th className={styles.num}>Expected</th>
-                <th className={styles.num}>Completed</th>
-                <th className={styles.num}>%</th>
-                <th>Per-module</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summary.map((s) => (
-                <tr key={s.user_id}>
-                  <td>{s.label}</td>
-                  <td className={styles.num}>{s.expected}</td>
-                  <td className={styles.num}>{s.completed}</td>
-                  <td className={styles.num}>{s.completion}</td>
-                  <td>
-                    <div className={styles.modules}>
-                      {Object.entries(s.perModule).map(([mid, v]) => (
-                        <span key={mid} className={styles.modChip} title={`${v.completed}/${v.expected}`}>
-                          {v.module_name}: {v.completed}/{v.expected}
-                        </span>
-                      ))}
+      {!loading && !error && summary.length === 0 && (
+        <div className={styles.help}>No users summarized</div>
+      )}
+
+      {!loading && !error && summary.length > 0 && (
+        <div className={styles.grid}>
+          {summary.map((s) => (
+            <div key={s.user_id} className={styles.card}>
+              <div className={styles.cardHead}>
+                <div className={styles.user}>{s.label}</div>
+                <div className={styles.counts}>
+                  <span className={styles.countNum}>{s.completed}</span>
+                  <span className={styles.countSep}>/</span>
+                  <span className={styles.countDen}>{s.expected}</span>
+                </div>
+              </div>
+
+              <div className={styles.progressRow}>
+                <div className={styles.progress}>
+                  <div
+                    className={`${styles.progressBar} ${pctClass(s.completion)}`}
+                    style={{ width: `${s.completion}%` }}
+                  />
+                </div>
+                <div className={styles.pct}>{s.completion}%</div>
+              </div>
+
+              <div className={styles.modList}>
+                {Object.entries(s.perModule).map(([mid, v]) => {
+                  const pct = v.expected ? Math.round((v.completed / v.expected) * 100) : 0;
+                  return (
+                    <div key={mid} className={styles.modItem} title={`${v.completed}/${v.expected}`}>
+                      <div className={styles.modTitle}>{v.module_name}</div>
+                      <div className={styles.modBarWrap}>
+                        <div className={styles.modBar}>
+                          <div
+                            className={`${styles.modBarFill} ${pctClass(pct)}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className={styles.modCounts}>
+                          {v.completed}/{v.expected}
+                        </div>
+                      </div>
                     </div>
-                  </td>
-                </tr>
-              ))}
-              {summary.length === 0 && (
-                <tr>
-                  <td colSpan={5} className={styles.help}>No users summarized</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

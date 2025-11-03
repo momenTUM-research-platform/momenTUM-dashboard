@@ -1,3 +1,4 @@
+# routers/adherence.py
 from __future__ import annotations
 import os
 from datetime import datetime, date
@@ -35,9 +36,16 @@ class OccurrenceOut(BaseModel):
     start: str
     end: str
 
+class ModuleMeta(BaseModel):
+    module_id: str
+    module_name: str
+    repeat: str
+    sticky: bool
+
 class StructureCountOut(BaseModel):
     study_days: int
-    per_module: Dict[str, int]
+    per_module: Dict[str, int]           # module_id -> expected count over whole study
+    per_module_meta: Dict[str, ModuleMeta]
     total: int
 
 # --- Helpers ---
@@ -101,7 +109,6 @@ def _infer_study_days_from_structure(study: Dict[str, Any]) -> int:
                     off = 0
                 return max(1, off - 1)
 
-    # Otherwise, use the max offsetDays of any 'never' module
     max_off = None
     for m in modules:
         alerts = m.get("alerts") or {}
@@ -174,8 +181,9 @@ def structure_count(
         non-sticky -> len(times) per day
       multiplied by inferred study_days.
     - One-offs (never):
-        sticky -> 1 total (if included)
+        sticky -> 1 total (if included; counted as 'ever completed' on the frontend)
         non-sticky -> len(times) total (if included)
+    Also returns per-module metadata (name, repeat, sticky) for frontend logic.
     """
     study = _fetch_study(study_id)
     study_days = _infer_study_days_from_structure(study)
@@ -185,6 +193,7 @@ def structure_count(
         exclude = {s.strip() for s in exclude_module_ids.split(",") if s.strip()}
 
     per_module: Dict[str, int] = {}
+    per_module_meta: Dict[str, ModuleMeta] = {}
     total = 0
 
     for mod in (study.get("modules") or []):
@@ -192,6 +201,7 @@ def structure_count(
         if not mid or mid in exclude:
             continue
 
+        name = (mod.get("name") or mid).strip()
         alerts = mod.get("alerts") or {}
         repeat = (alerts.get("repeat") or "").lower()
         sticky = bool(alerts.get("sticky", False))
@@ -207,6 +217,17 @@ def structure_count(
             count = 0
 
         per_module[mid] = count
+        per_module_meta[mid] = ModuleMeta(
+            module_id=mid,
+            module_name=name,
+            repeat=repeat,
+            sticky=sticky,
+        )
         total += count
 
-    return StructureCountOut(study_days=study_days, per_module=per_module, total=total)
+    return StructureCountOut(
+        study_days=study_days,
+        per_module=per_module,
+        per_module_meta=per_module_meta,
+        total=total,
+    )

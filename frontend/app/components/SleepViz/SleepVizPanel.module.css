@@ -2,25 +2,44 @@
   margin-top: 0.75rem;
 }
 
+/* Tabs */
+.tabs {
+  display: inline-flex;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+.tab {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.9rem;
+  background: #fff;
+  color: #374151;
+  border: none;
+}
+.tab + .tab { border-left: 1px solid #e5e7eb; }
+.tabActive {
+  background: #111827;
+  color: #fff;
+}
+
+/* Sleep roles */
 .roles {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
   gap: 0.75rem;
   margin-bottom: 0.75rem;
 }
-
 @media (min-width: 900px) {
   .roles {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
-
 .actions {
   display: flex;
   align-items: end;
   padding-top: 1.25rem;
 }
-
 .btn {
   background: #111827;
   color: #fff;
@@ -33,44 +52,25 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
-
 .legend {
   font-size: 0.8rem;
   color: #4b5563;
   margin: 0.25rem 0 0.75rem;
 }
-
-.ribbonWrap {
-  margin-top: 0.25rem;
-}
-
-.userBlock {
-  margin-bottom: 1.5rem;
-}
-
+.ribbonWrap { margin-top: 0.25rem; }
+.userBlock { margin-bottom: 1.5rem; }
 .userHeader {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  display: flex; align-items: center; gap: 0.5rem;
   margin: 0 2px 0.35rem 2px;
 }
-
 .userChip {
   border: 2px solid #111827;
   border-radius: 999px;
   padding: 0.15rem 0.55rem;
-  font-weight: 600;
-  font-size: 0.85rem;
+  font-weight: 600; font-size: 0.85rem;
 }
-
-.userSub {
-  font-size: 0.8rem;
-  color: #6b7280;
-}
-
-.rawGray {
-  color: #9ca3af;
-}
+.userSub { font-size: 0.8rem; color: #6b7280; }
+.rawGray { color: #9ca3af; }
 
 .canvasCard {
   border: 1px solid #e5e7eb;
@@ -98,28 +98,16 @@
   color: #4b5563;
   border-bottom: 1px dashed #e5e7eb;
 }
-
 .legendItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+  display: inline-flex; align-items: center; gap: 0.4rem;
   white-space: nowrap;
 }
-
 .swatch {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  border: 1px solid #ffffff80;
-  box-shadow: 0 0 0 1px #e5e7eb inset;
+  display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+  border: 1px solid #ffffff80; box-shadow: 0 0 0 1px #e5e7eb inset;
 }
-
-/* NEW: small visual separation for overlay legend items */
-.overlayLegend {
-  border-left: 1px solid #e5e7eb;
-  padding-left: 0.5rem;
-}
+/* small visual separation for overlay legend items */
+.overlayLegend { border-left: 1px solid #e5e7eb; padding-left: 0.5rem; }
 
 .statsGrid {
   margin-top: 1rem;
@@ -127,31 +115,45 @@
   grid-template-columns: repeat(1, minmax(0, 1fr));
   gap: 0.75rem;
 }
-
 @media (min-width: 900px) {
-  .statsGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .statsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.statCard {
+  border: 1px solid #e5e7eb; border-radius: 0.75rem; background: #fff;
+  padding: 0.75rem; font-size: 0.9rem; color: #374151;
+}
+.statTitle { font-weight: 600; margin-bottom: 0.35rem; }
+.statBody { line-height: 1.6; }
+.statStrong { font-weight: 600; }
+
+/* ===== Variables mode ===== */
+.varsControls {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+@media (min-width: 900px) {
+  .varsControls {
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
   }
 }
-
-.statCard {
+.inputMulti {
+  width: 100%;
+  min-height: 6.5rem;
   border: 1px solid #e5e7eb;
-  border-radius: 0.75rem;
+  border-radius: 0.5rem;
   background: #fff;
-  padding: 0.75rem;
+  padding: 0.4rem;
   font-size: 0.9rem;
-  color: #374151;
 }
+.help { font-size: 0.8rem; color: #6b7280; margin-top: 0.25rem; }
 
-.statTitle {
-  font-weight: 600;
-  margin-bottom: 0.35rem;
+.segment { display: inline-flex; border: 1px solid #e5e7eb; border-radius: 0.5rem; overflow: hidden; }
+.segmentBtn {
+  background: #fff; color: #374151; border: none; padding: 0.35rem 0.6rem; font-size: 0.875rem;
 }
+.segmentBtn + .segmentBtn { border-left: 1px solid #e5e7eb; }
+.segmentBtnActive { background: #111827; color: #fff; }
 
-.statBody {
-  line-height: 1.6;
-}
-
-.statStrong {
-  font-weight: 600;
-}
+.varsLegendWrap { display:flex; flex-wrap:wrap; gap:.5rem; }
