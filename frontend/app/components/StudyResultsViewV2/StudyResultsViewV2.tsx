@@ -20,7 +20,7 @@ import styles from "./StudyResultsViewV2.module.css";
 type Props = { studyId: string };
 
 export default function StudyResultsViewV2({ studyId }: Props) {
-  // data
+  // main data
   const [rows, setRows] = useState<LabeledSurveyResponseOut[] | null>(null);
   const [facets, setFacets] = useState<Facets | null>(null);
   const [questions, setQuestions] = useState<StudyQuestion[] | null>(null);
@@ -32,16 +32,19 @@ export default function StudyResultsViewV2({ studyId }: Props) {
   const [mappingLoading, setMappingLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // filters
+  // basic filters
   const [userIds, setUserIds] = useState<string[]>([]);
   const [moduleIds, setModuleIds] = useState<string[]>([]);
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
 
-  // mapping selection
+  // extra filter: by mapped identifier (e.g. Participant ID)
+  const [mappedIds, setMappedIds] = useState<string[]>([]);
+
+  // mapping selection (which question is used to derive mapping per user)
   const [mapKey, setMapKey] = useState<string>("");              // `${module_id}:${question_id}`
   const [mapMode, setMapMode] = useState<MappingMode>("latest"); // "latest" | "earliest"
-  const [userMap, setUserMap] = useState<Record<string, string> | null>(null);
+  const [userMap, setUserMap] = useState<Record<string, string> | null>(null); // user_id -> mapped label
 
   // view + paging
   const [activeView, setActiveView] = useState<"table" | "calendar" | "visualize" | "adherence">("table");
@@ -58,13 +61,56 @@ export default function StudyResultsViewV2({ studyId }: Props) {
     return questions.find((q) => q.module_id === mid && q.question_id === qid) ?? null;
   }, [questions, mapKey]);
 
+  // all distinct mapped values (e.g. Participant IDs) from userMap
+  const distinctMappedIds = useMemo(() => {
+    if (!userMap) return [];
+    const vals = Object.values(userMap).filter((v) => v && v.trim() !== "");
+    return Array.from(new Set(vals)).sort();
+  }, [userMap]);
+
+  // effective set of internal user IDs sent to the backend, combining:
+  // - direct userIds filter
+  // - mappedIds filter (resolved via userMap)
+  const effectiveUserIds = useMemo(() => {
+    if (!userMap && mappedIds.length) {
+      // mapping filter selected but mapping not loaded; safest default is no results
+      return [] as string[];
+    }
+
+    let mappedUserIds: string[] = [];
+    if (userMap && mappedIds.length) {
+      mappedUserIds = Object.entries(userMap)
+        .filter(([, label]) => mappedIds.includes(label))
+        .map(([uid]) => uid);
+    }
+
+    // only mappedIds filter
+    if (!userIds.length && mappedUserIds.length) {
+      return mappedUserIds;
+    }
+
+    // only explicit userIds filter
+    if (userIds.length && !mappedUserIds.length) {
+      return userIds;
+    }
+
+    // both: intersect explicit userIds with mapped-based IDs
+    if (userIds.length && mappedUserIds.length) {
+      const mappedSet = new Set(mappedUserIds);
+      return userIds.filter((u) => mappedSet.has(u));
+    }
+
+    // no filtering on user dimension
+    return userIds;
+  }, [userIds, mappedIds, userMap]);
+
   async function load(pageArg = page) {
     setLoading(true);
     setError(null);
     try {
       const isCalendar = activeView === "calendar";
       const res = await fetchLabeledResponses(studyId, {
-        user_id: userIds.length ? userIds : undefined,
+        user_id: effectiveUserIds.length ? effectiveUserIds : undefined,
         module_id: moduleIds.length ? moduleIds : undefined,
         from: from || undefined,
         to: to || undefined,
@@ -85,7 +131,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
     setFacetsLoading(true);
     try {
       const f = await fetchFacets(studyId, {
-        user_id: userIds.length ? userIds : undefined,
+        user_id: effectiveUserIds.length ? effectiveUserIds : undefined,
         module_id: moduleIds.length ? moduleIds : undefined,
         from: from || undefined,
         to: to || undefined,
@@ -101,7 +147,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
     try {
       const q = await fetchStudyQuestions(studyId);
       setQuestions(q);
-      // keep selection if still valid
+      // keep existing mapping selection if it still exists in the latest question set
       setMapKey((prev) => {
         if (!prev) return "";
         const [mid, qid] = prev.split(":");
@@ -115,6 +161,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
   async function loadMapping() {
     if (!mapKey) {
       setUserMap(null);
+      setMappedIds([]); // reset mapping filter when no mapping is selected
       return;
     }
     const [module_id, question_id] = mapKey.split(":");
@@ -124,29 +171,43 @@ export default function StudyResultsViewV2({ studyId }: Props) {
     try {
       const m = await fetchUserMapping(studyId, { module_id, question_id, mode: mapMode });
       setUserMap(m);
+      // keep mappedIds if they are still valid labels; drop anything that disappeared
+      setMappedIds((prev) => {
+        if (!m) return [];
+        const labels = new Set(Object.values(m));
+        return prev.filter((id) => labels.has(id));
+      });
     } catch (e) {
       console.error(e);
       setUserMap(null);
+      setMappedIds([]);
     } finally {
       setMappingLoading(false);
     }
   }
 
-  // reload on filters/view change
+  // reload data when filters or view change
   useEffect(() => {
     setPage(1);
     loadFacets();
     load(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studyId, JSON.stringify(userIds), JSON.stringify(moduleIds), from, to, activeView]);
+  }, [
+    studyId,
+    JSON.stringify(effectiveUserIds),
+    JSON.stringify(moduleIds),
+    from,
+    to,
+    activeView,
+  ]);
 
-  // fetch questions when study changes
+  // fetch questions whenever the study changes
   useEffect(() => {
     loadQuestions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studyId]);
 
-  // fetch mapping whenever selection/mode changes
+  // fetch mapping whenever mapping selection or mode changes
   useEffect(() => {
     loadMapping();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,8 +215,12 @@ export default function StudyResultsViewV2({ studyId }: Props) {
 
   const toggleUser = (v: string) =>
     setUserIds((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
+
   const toggleModule = (v: string) =>
     setModuleIds((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
+
+  const toggleMappedId = (v: string) =>
+    setMappedIds((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
 
   const chevronBg =
     "url(\"data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%236b7280' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")";
@@ -179,13 +244,16 @@ export default function StudyResultsViewV2({ studyId }: Props) {
     return groups;
   }, [questions]);
 
+  const mappingLabel = selectedQuestion?.question_text || "Mapped ID";
+
   return (
     <div className={styles.root}>
       {/* Header */}
       <div className="text-center">
         <h2 className="text-2xl font-semibold mb-1">Filters</h2>
         <p className="text-sm text-gray-600">
-          Refine by users, modules, and time range. Calendar loads a larger batch automatically.
+          Refine by users, mapped IDs, modules, and time range. Calendar loads a larger batch
+          automatically.
         </p>
       </div>
 
@@ -216,7 +284,6 @@ export default function StudyResultsViewV2({ studyId }: Props) {
           >
             Visualize
           </button>
-
           <button
             role="tab"
             aria-selected={activeView === "adherence"}
@@ -238,6 +305,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
           className={styles.btn}
           onClick={() => {
             setUserIds([]);
+            setMappedIds([]);
             setModuleIds([]);
             setFrom("");
             setTo("");
@@ -256,7 +324,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
       <div className={styles.filters}>
         {/* Mapping selector */}
         <div className="field">
-          <label>Mapping (pick a question to label users, e.g., “Participant ID”)</label>
+          <label>Mapping (pick a question to label users, e.g. “Participant ID”)</label>
           <select
             className={styles.input}
             value={mapKey}
@@ -314,7 +382,64 @@ export default function StudyResultsViewV2({ studyId }: Props) {
           </div>
         </div>
 
-        {/* Users */}
+        {/* Mapped IDs (e.g. Participant IDs) */}
+        {userMap && distinctMappedIds.length > 0 && (
+          <div className="field">
+            <label>{mappingLabel}</label>
+            <select
+              className={styles.input}
+              value=""
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v) toggleMappedId(v);
+              }}
+              style={{
+                appearance: "none",
+                backgroundImage: chevronBg,
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "right .75rem center",
+                backgroundSize: "1rem",
+              }}
+            >
+              <option value="">
+                {mappedIds.length ? "Add another…" : "Select…"}
+              </option>
+              {distinctMappedIds.map((id) => (
+                <option key={id} value={id}>
+                  {mappedIds.includes(id) ? "✓ " : ""}
+                  {id}
+                </option>
+              ))}
+            </select>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {mappedIds.length === 0 ? (
+                <span className={styles.help}>All mapped IDs</span>
+              ) : (
+                <>
+                  {mappedIds.map((id) => (
+                    <span key={id} className={styles.chip}>
+                      {id}
+                      <button
+                        aria-label={`Remove ${id}`}
+                        onClick={() => toggleMappedId(id)}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <button
+                    className="text-xs underline"
+                    onClick={() => setMappedIds([])}
+                  >
+                    Clear all
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Users (internal IDs) */}
         <div className="field">
           <label>Users</label>
           <select
@@ -435,37 +560,39 @@ export default function StudyResultsViewV2({ studyId }: Props) {
       {!loading && rows && (
         <>
           {rows.length === 0 ? (
-            <div className="border rounded-lg p-4 text-sm text-gray-600 bg-white">No results</div>
+            <div className="border rounded-lg p-4 text-sm text-gray-600 bg-white">
+              No results
+            </div>
           ) : activeView === "table" ? (
             <TableViewV2
               rows={rows}
               mapping={userMap ?? undefined}
-              mappingName={selectedQuestion?.question_text || "Mapped ID"}
+              mappingName={mappingLabel}
             />
           ) : activeView === "calendar" ? (
             <CalendarViewV2
               rows={rows}
               mapping={userMap ?? undefined}
-              mappingName={selectedQuestion?.question_text || "Mapped ID"}
+              mappingName={mappingLabel}
             />
           ) : activeView === "visualize" ? (
             <SleepVizPanel
               studyId={studyId}
-              userIds={userIds.length ? userIds : undefined}
+              userIds={effectiveUserIds.length ? effectiveUserIds : undefined}
               from={from || undefined}
               to={to || undefined}
               mapping={userMap ?? undefined}
-              mappingName={selectedQuestion?.question_text || "Mapped ID"}
+              mappingName={mappingLabel}
             />
           ) : (
-            // adherence
+            // adherence view
             <AdherencePanel
               studyId={studyId}
-              userIds={userIds.length ? userIds : undefined}
-              from={from ? from.slice(0,10) : undefined} // pass Y-M-D; panel normalizes both
-              to={to ? to.slice(0,10) : undefined}
+              userIds={effectiveUserIds.length ? effectiveUserIds : undefined}
+              from={from ? from.slice(0, 10) : undefined} // pass Y-M-D; panel normalizes both
+              to={to ? to.slice(0, 10) : undefined}
               mapping={userMap ?? undefined}
-              mappingName={selectedQuestion?.question_text || "Mapped ID"}
+              mappingName={mappingLabel}
             />
           )}
 
@@ -475,8 +602,9 @@ export default function StudyResultsViewV2({ studyId }: Props) {
                 className={styles.btn}
                 onClick={() => {
                   if (page > 1) {
-                    setPage((p) => p - 1);
-                    load(page - 1);
+                    const next = page - 1;
+                    setPage(next);
+                    load(next);
                   }
                 }}
                 disabled={page === 1 || loading}
@@ -487,8 +615,9 @@ export default function StudyResultsViewV2({ studyId }: Props) {
               <button
                 className={styles.btn}
                 onClick={() => {
-                  setPage((p) => p + 1);
-                  load(page + 1);
+                  const next = page + 1;
+                  setPage(next);
+                  load(next);
                 }}
                 disabled={loading || rows.length < TABLE_PAGE_SIZE}
               >
@@ -499,7 +628,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
         </>
       )}
 
-      {error && <div className="text-sm text-red-600">{error}</div>}
+      {error && <div className="text-sm text-red-600 mt-2">{error}</div>}
     </div>
   );
 }
