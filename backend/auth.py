@@ -11,6 +11,8 @@ from crud import get_user_by_username, pwd_context, delete_user
 from schemas import UserCreate  # Pydantic model with: username, password, name, surname, email, role
 import os
 from dotenv import load_dotenv
+from pydantic import BaseModel
+from typing import List
 
 
 load_dotenv()
@@ -23,7 +25,8 @@ if not SECRET_KEY:
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
-
+class UserStudiesUpdate(BaseModel):
+    studies: List[str]
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -177,3 +180,89 @@ async def reset_user_password(
     await db.commit()
     await db.refresh(user)
     return {"message": f"Password for user {user.username} has been reset"}
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Validates the bearer token and returns the corresponding User row.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str | None = payload.get("sub")
+        if not username:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    user = await get_user_by_username(db, username)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    return user
+
+
+from fastapi import HTTPException, Depends, status
+from models import User
+
+async def require_study_access(
+    study_id: str,
+    user: User = Depends(get_current_user),
+) -> User:
+    """
+    Enforces study-level authorization.
+
+    - Admin users: full access
+    - Regular users: study_id must be present in user.studies
+    """
+    if user.role == "admin":
+        return user
+
+    allowed = user.studies or []
+    if study_id not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to access this study",
+        )
+
+    return user
+
+@router.patch("/auth/users/{user_id}/studies")
+async def update_user_studies(
+    user_id: int,
+    payload: UserStudiesUpdate,
+    token: str = Depends(admin_required),
+    db: AsyncSession = Depends(get_db),
+):
+    # Fetch user
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Normalize: trim, drop empty, de-duplicate while preserving order
+    cleaned: list[str] = []
+    seen = set()
+    for s in payload.studies:
+        sid = (s or "").strip()
+        if not sid:
+            continue
+        if sid in seen:
+            continue
+        seen.add(sid)
+        cleaned.append(sid)
+
+    user.studies = cleaned
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "message": f"Studies updated for user {user.username}",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "studies": user.studies or [],
+        },
+    }

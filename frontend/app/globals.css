@@ -65,18 +65,15 @@ textarea:focus {
 /* Buttons */
 button {
   padding: 0.65rem 1.2rem;
-  background-color: #4a5568; /* muted, dark color */
-  color: white;
+  background-color: #4a5568;
+  color: #fff;
   border: none;
   border-radius: 6px;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
 }
-
-button:hover {
-  background-color: #2d3748;
-}
+button:hover { background-color: #2d3748; }
 
 /* Utility classes */
 .error {

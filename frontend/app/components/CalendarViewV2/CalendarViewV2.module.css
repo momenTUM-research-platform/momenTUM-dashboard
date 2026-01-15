@@ -1,0 +1,79 @@
+.wrapper {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    padding: 1rem;
+  }
+  
+  /* lightweight modal */
+  .modalBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 50;
+  }
+  
+  .modal {
+    width: 100%;
+    max-width: 720px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    padding: 1rem 1rem 0.75rem;
+  }
+  
+  .closeBtn {
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    line-height: 26px;
+    text-align: center;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  
+  .modalBody {
+    margin-top: 0.75rem;
+    max-height: 60vh;
+    overflow: auto;
+    padding-right: 0.25rem;
+  }
+  
+  .qaList {
+    list-style: disc;
+    margin-left: 1.25rem;
+    display: grid;
+    gap: 0.25rem;
+  }
+  
+  .q {
+    font-weight: 600;
+  }
+  
+  .a {
+    color: #111827;
+  }
+
+  .fcChip {
+    line-height: 1.2;
+  }
+  
+  .fcTitle {
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+  
+  .fcMeta {
+    font-size: 0.72rem;
+    opacity: 0.9;
+  }
+  
+  .modalBackdrop {
+    z-index: 9999;
+  }

@@ -13,3 +13,4 @@ pydantic
 sqlmodel
 pydantic_sqlalchemy
 pymongo
+email-validator>=2,<3
