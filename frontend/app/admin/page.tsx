@@ -1,23 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
 import PasswordInput from "../components/PasswordInput/PasswordInput";
 import styles from "./AdminPanel.module.css";
 
+type UserRow = {
+  id: number;
+  username: string;
+  name: string;
+  surname: string;
+  email: string;
+  role: string;
+  studies?: string[] | null;
+};
+
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token");
+}
+
+async function apiJson(path: string, init?: RequestInit): Promise<any> {
+  const res = await fetch(path, init);
+  const text = await res.text().catch(() => "");
+  if (!res.ok) {
+    throw new Error(text || `${res.status} ${res.statusText}`);
+  }
+  return text ? JSON.parse(text) : null;
+}
+
 export default function AdminPanel() {
   const { user, refreshUser, loading } = useAuth();
   const router = useRouter();
 
-  // Panel readiness
   const [isReady, setIsReady] = useState(false);
 
-  // Users list
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
-  // Create user form
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newName, setNewName] = useState("");
@@ -28,25 +49,26 @@ export default function AdminPanel() {
   const [createSuccess, setCreateSuccess] = useState("");
   const [usernameExists, setUsernameExists] = useState(false);
 
-  // Editing existing users
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editSurname, setEditSurname] = useState("");
   const [editEmail, setEditEmail] = useState("");
 
-  // Reset password
   const [resetUserId, setResetUserId] = useState<number | null>(null);
   const [newResetPassword, setNewResetPassword] = useState("");
 
-  // Basic password validation
+  const [studiesUserId, setStudiesUserId] = useState<number | null>(null);
+  const [studiesText, setStudiesText] = useState("");
+  const [studiesSaving, setStudiesSaving] = useState(false);
+  const [studiesError, setStudiesError] = useState<string | null>(null);
+
   const isPasswordValid = (pwd: string) => {
     const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
     return regex.test(pwd);
   };
 
-  // On mount: check token, refresh user
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getToken();
     if (!token) {
       router.push("/");
     } else {
@@ -54,7 +76,6 @@ export default function AdminPanel() {
     }
   }, [router, refreshUser]);
 
-  // After loading: verify user role
   useEffect(() => {
     if (!loading) {
       if (!user || user.role !== "admin") {
@@ -65,32 +86,25 @@ export default function AdminPanel() {
     }
   }, [user, loading, router]);
 
-  // Fetch users
   const fetchUsers = async () => {
-    const token = localStorage.getItem("token");
+    setLoadingUsers(true);
+    const token = getToken();
     try {
-      const res = await fetch("/api/auth/users", {
+      const data = await apiJson("/api/auth/users", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data);
-      } else {
-        console.error("Failed to fetch users");
-      }
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Error fetching users:", err);
+    } finally {
+      setLoadingUsers(false);
     }
-    setLoadingUsers(false);
   };
 
   useEffect(() => {
-    if (isReady) {
-      fetchUsers();
-    }
+    if (isReady) fetchUsers();
   }, [isReady]);
 
-  // Check if username is taken
   const checkUsername = async () => {
     if (!newUsername) return;
     try {
@@ -99,7 +113,7 @@ export default function AdminPanel() {
       );
       if (res.ok) {
         const data = await res.json();
-        setUsernameExists(data.exists);
+        setUsernameExists(Boolean(data?.exists));
       } else {
         setUsernameExists(false);
       }
@@ -109,7 +123,6 @@ export default function AdminPanel() {
     }
   };
 
-  // Create user
   const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setCreateError("");
@@ -126,7 +139,7 @@ export default function AdminPanel() {
       return;
     }
 
-    const token = localStorage.getItem("token");
+    const token = getToken();
     if (!token) {
       setCreateError("Not authenticated");
       return;
@@ -149,13 +162,13 @@ export default function AdminPanel() {
     });
 
     if (!res.ok) {
-      const errText = await res.text();
+      const errText = await res.text().catch(() => "");
       setCreateError(errText || "Failed to create user");
       return;
     }
 
-    const responseData = await res.json();
-    setCreateSuccess(`User created successfully: ${responseData.message}`);
+    const responseData = await res.json().catch(() => ({}));
+    setCreateSuccess(`User created successfully: ${responseData.message || ""}`);
     setNewUsername("");
     setNewPassword("");
     setNewName("");
@@ -166,16 +179,15 @@ export default function AdminPanel() {
     fetchUsers();
   };
 
-  // Delete user
   const handleDeleteUser = async (userId: number) => {
-    const token = localStorage.getItem("token");
+    const token = getToken();
     try {
       const res = await fetch(`/api/auth/users/${userId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
-        const errText = await res.text();
+        const errText = await res.text().catch(() => "");
         alert(errText || "Failed to delete user");
       } else {
         alert("User deleted successfully");
@@ -187,17 +199,15 @@ export default function AdminPanel() {
     }
   };
 
-  // Start editing
-  const handleEditClick = (u: any) => {
+  const handleEditClick = (u: UserRow) => {
     setEditingUserId(u.id);
     setEditName(u.name);
     setEditSurname(u.surname);
     setEditEmail(u.email);
   };
 
-  // Update user
   const handleUpdateUser = async () => {
-    const token = localStorage.getItem("token");
+    const token = getToken();
     try {
       const res = await fetch(`/api/auth/users/${editingUserId}`, {
         method: "PATCH",
@@ -212,7 +222,7 @@ export default function AdminPanel() {
         }),
       });
       if (!res.ok) {
-        const errText = await res.text();
+        const errText = await res.text().catch(() => "");
         alert(errText || "Failed to update user");
       } else {
         alert("User updated successfully");
@@ -225,7 +235,6 @@ export default function AdminPanel() {
     }
   };
 
-  // Reset password
   const handleResetPassword = async () => {
     if (!newResetPassword) {
       alert("Please enter a new password.");
@@ -237,7 +246,7 @@ export default function AdminPanel() {
       );
       return;
     }
-    const token = localStorage.getItem("token");
+    const token = getToken();
     try {
       const res = await fetch(`/api/auth/users/${resetUserId}/reset-password`, {
         method: "PATCH",
@@ -248,7 +257,7 @@ export default function AdminPanel() {
         body: JSON.stringify({ new_password: newResetPassword }),
       });
       if (!res.ok) {
-        const errText = await res.text();
+        const errText = await res.text().catch(() => "");
         alert(errText || "Failed to reset password");
       } else {
         alert("Password reset successfully");
@@ -262,15 +271,62 @@ export default function AdminPanel() {
     }
   };
 
-  if (!isReady) {
-    return null;
-  }
+  const openStudiesEditor = (u: UserRow) => {
+    setStudiesError(null);
+    setStudiesUserId(u.id);
+    const existing = Array.isArray(u.studies) ? u.studies : [];
+    setStudiesText(existing.join("\n"));
+  };
+
+  const closeStudiesEditor = () => {
+    setStudiesUserId(null);
+    setStudiesText("");
+    setStudiesError(null);
+  };
+
+  const handleSaveStudies = async () => {
+    if (studiesUserId == null) return;
+    setStudiesSaving(true);
+    setStudiesError(null);
+
+    const token = getToken();
+    if (!token) {
+      setStudiesError("Not authenticated");
+      setStudiesSaving(false);
+      return;
+    }
+
+    const studies = studiesText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    try {
+      await apiJson(`/api/auth/users/${studiesUserId}/studies`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ studies }),
+      });
+
+      await fetchUsers();
+      closeStudiesEditor();
+      alert("Studies updated");
+    } catch (e: any) {
+      setStudiesError(e?.message || "Failed to update studies");
+    } finally {
+      setStudiesSaving(false);
+    }
+  };
+
+  if (!isReady) return null;
 
   return (
     <div className={styles.container}>
       <h1 className={styles.header}>Admin Panel</h1>
 
-      {/* Create User Section */}
       <section className={styles.section}>
         <h2>Create New User</h2>
         {createError && <p className={styles.errorMessage}>{createError}</p>}
@@ -291,6 +347,7 @@ export default function AdminPanel() {
               <p className={styles.errorMessage}>Username already exists.</p>
             )}
           </div>
+
           <div className={styles.formGroup}>
             <label>Password:</label>
             <PasswordInput
@@ -300,6 +357,7 @@ export default function AdminPanel() {
               required
             />
           </div>
+
           <div className={styles.formGroup}>
             <label>Name:</label>
             <input
@@ -310,6 +368,7 @@ export default function AdminPanel() {
               className={styles.inputField}
             />
           </div>
+
           <div className={styles.formGroup}>
             <label>Surname:</label>
             <input
@@ -320,6 +379,7 @@ export default function AdminPanel() {
               className={styles.inputField}
             />
           </div>
+
           <div className={styles.formGroup}>
             <label>Email:</label>
             <input
@@ -331,6 +391,7 @@ export default function AdminPanel() {
               className={styles.inputField}
             />
           </div>
+
           <div className={styles.formGroup}>
             <label>Role:</label>
             <select
@@ -342,6 +403,7 @@ export default function AdminPanel() {
               <option value="admin">Admin</option>
             </select>
           </div>
+
           <button type="submit" className={styles.button}>
             Create User
           </button>
@@ -350,9 +412,41 @@ export default function AdminPanel() {
 
       <hr className={styles.hr} />
 
-      {/* Manage Users Section */}
       <section className={styles.section}>
         <h2>Manage Users</h2>
+
+        {studiesUserId != null && (
+          <div className={styles.section} style={{ marginTop: "1rem" }}>
+            <h3>Assign Studies (user ID {studiesUserId})</h3>
+            <p className={styles.helpText}>
+              One study ID per line. These are the IDs checked by study-level authorization.
+            </p>
+
+            {studiesError && <p className={styles.errorMessage}>{studiesError}</p>}
+
+            <textarea
+              className={styles.inputField}
+              style={{ minHeight: 140, width: "100%" }}
+              value={studiesText}
+              onChange={(e) => setStudiesText(e.target.value)}
+              placeholder={"ambient_bd_ema_1\nanother_study_id"}
+            />
+
+            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
+              <button
+                className={styles.actionButton}
+                onClick={handleSaveStudies}
+                disabled={studiesSaving}
+              >
+                Save Studies
+              </button>
+              <button className={styles.actionButton} onClick={closeStudiesEditor}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {loadingUsers ? (
           <p>Loading users...</p>
         ) : users.length === 0 ? (
@@ -368,6 +462,7 @@ export default function AdminPanel() {
                   <th>Surname</th>
                   <th>Email</th>
                   <th>Role</th>
+                  <th>Studies</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -376,6 +471,7 @@ export default function AdminPanel() {
                   <tr key={u.id}>
                     <td>{u.id}</td>
                     <td>{u.username}</td>
+
                     <td>
                       {editingUserId === u.id ? (
                         <input
@@ -388,6 +484,7 @@ export default function AdminPanel() {
                         u.name
                       )}
                     </td>
+
                     <td>
                       {editingUserId === u.id ? (
                         <input
@@ -400,6 +497,7 @@ export default function AdminPanel() {
                         u.surname
                       )}
                     </td>
+
                     <td>
                       {editingUserId === u.id ? (
                         <input
@@ -412,14 +510,19 @@ export default function AdminPanel() {
                         u.email
                       )}
                     </td>
+
                     <td>{u.role}</td>
+
+                    <td>
+                      {Array.isArray(u.studies) && u.studies.length > 0
+                        ? u.studies.length
+                        : 0}
+                    </td>
+
                     <td>
                       {editingUserId === u.id ? (
                         <>
-                          <button
-                            className={styles.actionButton}
-                            onClick={handleUpdateUser}
-                          >
+                          <button className={styles.actionButton} onClick={handleUpdateUser}>
                             Save
                           </button>
                           <button
@@ -437,12 +540,21 @@ export default function AdminPanel() {
                           >
                             Edit
                           </button>
+
+                          <button
+                            className={styles.actionButton}
+                            onClick={() => openStudiesEditor(u)}
+                          >
+                            Studies
+                          </button>
+
                           <button
                             className={styles.deleteButton}
                             onClick={() => handleDeleteUser(u.id)}
                           >
                             Delete
                           </button>
+
                           {u.username.toLowerCase() !== "admin" && (
                             <>
                               {resetUserId === u.id ? (
@@ -451,9 +563,7 @@ export default function AdminPanel() {
                                     type="password"
                                     placeholder="New password"
                                     value={newResetPassword}
-                                    onChange={(e) =>
-                                      setNewResetPassword(e.target.value)
-                                    }
+                                    onChange={(e) => setNewResetPassword(e.target.value)}
                                   />
                                   <button
                                     className={styles.actionButton}
@@ -491,7 +601,6 @@ export default function AdminPanel() {
 
       <hr className={styles.hr} />
 
-      {/* Navigation */}
       <section className={styles.navSection}>
         <h2>Navigation</h2>
         <div className={styles.navLinks}>

@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
 from pymongo import MongoClient, DESCENDING, ASCENDING
+from fastapi import Depends
+from auth import require_study_access
+from models import User
 
 from schemas import LabeledSurveyResponseOut, QuestionAnswer
 
@@ -140,6 +143,7 @@ def list_study_responses_labeled(
     sort: str = Query(default="desc", regex="^(asc|desc)$"),
     skip: int = 0,
     limit: int = 100,
+    _user: User = Depends(require_study_access),
 ):
     users = _explode(user_id)
     modules = _explode(module_id)

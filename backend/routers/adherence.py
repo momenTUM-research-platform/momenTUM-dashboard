@@ -1,10 +1,10 @@
-# routers/adherence.py
 from __future__ import annotations
+
 import os
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from pymongo import MongoClient, ASCENDING
 
@@ -13,6 +13,8 @@ try:
 except Exception:  # pragma: no cover
     from backports.zoneinfo import ZoneInfo  # type: ignore
 
+from auth import require_study_access
+from models import User
 from services.adherence_schedule import expand_study_schedule
 
 router = APIRouter(prefix="/v2/adherence", tags=["adherence"])
@@ -36,17 +38,20 @@ class OccurrenceOut(BaseModel):
     start: str
     end: str
 
+
 class ModuleMeta(BaseModel):
     module_id: str
     module_name: str
     repeat: str
     sticky: bool
 
+
 class StructureCountOut(BaseModel):
     study_days: int
-    per_module: Dict[str, int]           # module_id -> expected count over whole study
+    per_module: Dict[str, int]
     per_module_meta: Dict[str, ModuleMeta]
     total: int
+
 
 # --- Helpers ---
 def _to_date(s: str, tz: ZoneInfo) -> date:
@@ -58,11 +63,13 @@ def _to_date(s: str, tz: ZoneInfo) -> date:
     except Exception:
         raise HTTPException(400, f"Bad date: {s}")
 
+
 def _ensure_tz(tz_name: Optional[str]) -> ZoneInfo:
     try:
         return ZoneInfo(tz_name) if tz_name else ZoneInfo("UTC")
     except Exception:
         raise HTTPException(400, f"Unknown timezone: {tz_name}")
+
 
 def _fetch_study(study_id: str) -> Dict[str, Any]:
     doc = studies_col.find_one({"properties.study_id": study_id})
@@ -70,14 +77,17 @@ def _fetch_study(study_id: str) -> Dict[str, Any]:
         raise HTTPException(404, f"Study '{study_id}' not found")
     return doc
 
+
 def _earliest_response_dt_for_user(study_id: str, user_id: str) -> Optional[datetime]:
     cur = responses_col.find(
         {"study_id": study_id, "user_id": user_id, "response_time": {"$ne": None}},
         projection={"_id": 0, "response_time": 1},
     ).sort([("response_time", ASCENDING)]).limit(1)
+
     first = next(cur, None)
     if not first:
         return None
+
     rt = first.get("response_time")
     if isinstance(rt, datetime):
         return rt if rt.tzinfo else rt.replace(tzinfo=ZoneInfo("UTC"))
@@ -89,13 +99,8 @@ def _earliest_response_dt_for_user(study_id: str, user_id: str) -> Optional[date
             return None
     return None
 
+
 def _infer_study_days_from_structure(study: Dict[str, Any]) -> int:
-    """
-    Infer active daily length from JSON only.
-    1) If there is a 'never' module named like end-of-EMA, use offsetDays - 1.
-    2) Else use max offsetDays among 'never' modules minus 1.
-    3) Fallback to 7.
-    """
     modules = study.get("modules") or []
 
     for m in modules:
@@ -118,29 +123,28 @@ def _infer_study_days_from_structure(study: Dict[str, Any]) -> int:
             except Exception:
                 off = 0
             max_off = off if max_off is None else max(max_off, off)
+
     if max_off is not None:
         return max(1, max_off - 1)
 
     return 7
 
+
 def _times_len(alerts: Dict[str, Any]) -> int:
     ts = alerts.get("times") or ["12:00:00"]
     return len(ts)
 
+
 # --- Routes ---
 @router.get("/expected", response_model=List[OccurrenceOut])
 def expected_windows(
-    study_id: str = Query(..., description="Study ID"),
-    from_: str = Query(..., alias="from", description="YYYY-MM-DD or ISO"),
-    to: str = Query(..., description="YYYY-MM-DD or ISO"),
-    tz: Optional[str] = Query("UTC", description="IANA TZ, e.g. Europe/Berlin"),
-    user_id: Optional[str] = Query(None, description="Anchor one-offs using this user's earliest response date"),
+    study_id: str = Query(...),
+    from_: str = Query(..., alias="from"),
+    to: str = Query(...),
+    tz: Optional[str] = Query("UTC"),
+    user_id: Optional[str] = Query(None),
+    _user: User = Depends(require_study_access),
 ):
-    """
-    Expected instances within [from,to] in TZ.
-    - Daily: expanded per day (sticky => 1/day, non-sticky => per time).
-    - Never: anchored at expectedEnrollmentDate OR user's baseline (earliest response local date) if user_id provided.
-    """
     zone = _ensure_tz(tz)
     start_date = _to_date(from_, zone)
     end_date = _to_date(to, zone)
@@ -160,31 +164,19 @@ def expected_windows(
         start_date,
         end_date,
         zone,
-        baseline_local_date=baseline_local_date,  # services must accept this kwarg
+        baseline_local_date=baseline_local_date,
     )
+
     return [OccurrenceOut(**o.__dict__) for o in occs]
+
 
 @router.get("/structure-count", response_model=StructureCountOut)
 def structure_count(
-    study_id: str = Query(..., description="Study ID"),
-    include_one_off: bool = Query(
-        True, description='Include repeat:"never" modules (1 each if sticky; else per time)'
-    ),
-    exclude_module_ids: Optional[str] = Query(
-        None, description="Comma-separated module IDs to exclude"
-    ),
+    study_id: str = Query(...),
+    include_one_off: bool = Query(True),
+    exclude_module_ids: Optional[str] = Query(None),
+    _user: User = Depends(require_study_access),
 ):
-    """
-    Fixed expected counts derived solely from the study JSON:
-    - Daily:
-        sticky -> 1 per day
-        non-sticky -> len(times) per day
-      multiplied by inferred study_days.
-    - One-offs (never):
-        sticky -> 1 total (if included; counted as 'ever completed' on the frontend)
-        non-sticky -> len(times) total (if included)
-    Also returns per-module metadata (name, repeat, sticky) for frontend logic.
-    """
     study = _fetch_study(study_id)
     study_days = _infer_study_days_from_structure(study)
 
@@ -196,7 +188,7 @@ def structure_count(
     per_module_meta: Dict[str, ModuleMeta] = {}
     total = 0
 
-    for mod in (study.get("modules") or []):
+    for mod in study.get("modules") or []:
         mid = mod.get("id")
         if not mid or mid in exclude:
             continue
@@ -209,10 +201,7 @@ def structure_count(
         if repeat == "daily":
             count = study_days * (1 if sticky else _times_len(alerts))
         elif repeat == "never":
-            if not include_one_off:
-                count = 0
-            else:
-                count = 1 if sticky else _times_len(alerts)
+            count = (1 if sticky else _times_len(alerts)) if include_one_off else 0
         else:
             count = 0
 

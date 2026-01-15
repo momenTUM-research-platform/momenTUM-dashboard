@@ -19,9 +19,7 @@ export type StudyQuestion = {
 
 export type MappingMode = "latest" | "earliest";
 
-/**
- * Key: user_id, Value: the mapped label (e.g., participant ID)
- */
+/** Key: user_id, Value: mapped label (e.g., participant ID) */
 export type UserMapping = Record<string, string>;
 
 type FetchOptions = {
@@ -54,6 +52,17 @@ function buildQuery(opts: FetchOptions = {}) {
   return p.toString();
 }
 
+function getTokenFromStorage(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const t = window.localStorage.getItem("token") ?? undefined;
+  return t && t.trim().length > 0 ? t : undefined;
+}
+
+function authHeader(token?: string): Record<string, string> {
+  const t = token ?? getTokenFromStorage();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 /* ---------------------------------- */
 /* Questions (for selectable mapping) */
 /* ---------------------------------- */
@@ -63,13 +72,13 @@ export async function fetchStudyQuestions(
 ): Promise<StudyQuestion[]> {
   const url = `${API_BASE}/api/studies/${encodeURIComponent(studyId)}/questions`;
   const res = await fetch(url, {
-    credentials: "include",
     headers: {
       Accept: "application/json",
-      ...(opts?.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+      ...authHeader(opts?.token),
     },
     cache: "no-store",
   });
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Fetch questions failed: ${res.status} ${res.statusText} ${text}`);
@@ -87,13 +96,13 @@ export async function fetchLabeledResponses(
   const qs = buildQuery(opts);
   const url = `${API_BASE}/api/studies/${encodeURIComponent(studyId)}/responses:labeled?${qs}`;
   const res = await fetch(url, {
-    credentials: "include",
     headers: {
       Accept: "application/json",
-      ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+      ...authHeader(opts.token),
     },
     cache: "no-store",
   });
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Fetch failed: ${res.status} ${res.statusText} ${text}`);
@@ -108,7 +117,7 @@ export type Facets = {
 
 export async function fetchFacets(
   studyId: string,
-  opts: Pick<FetchOptions, "user_id" | "module_id" | "from" | "to"> = {}
+  opts: Pick<FetchOptions, "token" | "user_id" | "module_id" | "from" | "to"> = {}
 ): Promise<Facets> {
   const p = new URLSearchParams();
   opts.user_id?.forEach((v) => p.append("user_id", v));
@@ -118,10 +127,13 @@ export async function fetchFacets(
 
   const url = `${API_BASE}/api/studies/${encodeURIComponent(studyId)}/responses:facets?${p.toString()}`;
   const res = await fetch(url, {
-    credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      ...authHeader(opts.token),
+    },
     cache: "no-store",
   });
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Facets failed: ${res.status} ${res.statusText} ${text}`);
@@ -130,19 +142,14 @@ export async function fetchFacets(
 }
 
 /* ---------------------------------- */
-/* NEW: User mapping                  */
+/* User mapping                        */
 /* ---------------------------------- */
-/**
- * Fetch a user_id → label mapping based on a selected question.
- * Backend path assumed:
- *   GET /api/studies/{study_id}/user-mapping?module_id=...&question_id=...&mode=latest|earliest
- */
 export async function fetchUserMapping(
   studyId: string,
   args: {
     module_id: string;
     question_id: string;
-    mode?: MappingMode; // default "latest"
+    mode?: MappingMode;
     token?: string;
   }
 ): Promise<UserMapping> {
@@ -153,13 +160,13 @@ export async function fetchUserMapping(
 
   const url = `${API_BASE}/api/studies/${encodeURIComponent(studyId)}/user-mapping?${p.toString()}`;
   const res = await fetch(url, {
-    credentials: "include",
     headers: {
       Accept: "application/json",
-      ...(args.token ? { Authorization: `Bearer ${args.token}` } : {}),
+      ...authHeader(args.token),
     },
     cache: "no-store",
   });
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Fetch mapping failed: ${res.status} ${res.statusText} ${text}`);
@@ -167,10 +174,6 @@ export async function fetchUserMapping(
   return res.json();
 }
 
-/**
- * Convenience: attach a mapping field to each labeled row without mutating the original.
- * The field name defaults to "mapped_label" to be generic (e.g., could be participant_id).
- */
 export function withMappedLabel(
   rows: LabeledSurveyResponseOut[],
   mapping: UserMapping,

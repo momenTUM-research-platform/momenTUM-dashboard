@@ -127,7 +127,7 @@ export default function AdherencePanel({
           setStudyDays(sc.study_days);
           setStructureTotal(sc.total);
           setStructurePerModule(sc.per_module || {});
-          // @ts-ignore: meta is present in our backend response
+          // @ts-ignore: meta is present in backend response
           setModuleMeta(sc.per_module_meta || {});
         }
       } catch (e) {
@@ -139,7 +139,6 @@ export default function AdherencePanel({
     };
   }, [studyId]);
 
-  // Summaries (unchanged logic)
   useEffect(() => {
     let cancelled = false;
     (async () => {
