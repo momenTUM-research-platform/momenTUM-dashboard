@@ -103,29 +103,28 @@ def _earliest_response_dt_for_user(study_id: str, user_id: str) -> Optional[date
 def _infer_study_days_from_structure(study: Dict[str, Any]) -> int:
     modules = study.get("modules") or []
 
+    daily_days: list[int] = []
+
     for m in modules:
         alerts = m.get("alerts") or {}
-        if (alerts.get("repeat") or "").lower() == "never":
-            name = (m.get("name") or "").lower()
-            if "end" in name and "ema" in name:
-                try:
-                    off = int(alerts.get("offsetDays", 0))
-                except Exception:
-                    off = 0
-                return max(1, off - 1)
+        if (alerts.get("repeat") or "").lower() != "daily":
+            continue
 
-    max_off = None
-    for m in modules:
-        alerts = m.get("alerts") or {}
-        if (alerts.get("repeat") or "").lower() == "never":
-            try:
-                off = int(alerts.get("offsetDays", 0))
-            except Exception:
-                off = 0
-            max_off = off if max_off is None else max(max_off, off)
+        rc = alerts.get("repeatCount", None)
+        if rc is None:
+            continue
 
-    if max_off is not None:
-        return max(1, max_off - 1)
+        try:
+            rc_int = int(rc)
+        except Exception:
+            continue
+
+        # repeatCount is “number of repeats after the first”
+        # total days = repeatCount + 1
+        daily_days.append(max(1, rc_int + 1))
+
+    if daily_days:
+        return max(daily_days)
 
     return 7
 
