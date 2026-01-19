@@ -198,7 +198,7 @@ def structure_count(
         sticky = bool(alerts.get("sticky", False))
 
         if repeat == "daily":
-            count = study_days * (1 if sticky else _times_len(alerts))
+            count = study_days * (1 if sticky else _daily_occurrences_per_day(alerts))
         elif repeat == "never":
             count = (1 if sticky else _times_len(alerts)) if include_one_off else 0
         else:
@@ -219,3 +219,16 @@ def structure_count(
         per_module_meta=per_module_meta,
         total=total,
     )
+
+def _daily_occurrences_per_day(alerts: Dict[str, Any]) -> int:
+    times = alerts.get("times") or []
+    offset_time = alerts.get("offsetTime")
+
+    def norm(x: Any) -> str:
+        return str(x).strip()
+
+    uniq = {norm(t) for t in times if norm(t)}
+    if offset_time:
+        uniq.add(norm(offset_time))
+
+    return len(uniq) if uniq else 1

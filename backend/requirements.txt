@@ -8,7 +8,7 @@ SQLAlchemy
 asyncpg
 psycopg2-binary
 alembic
-dotenv
+python-dotenv
 pydantic
 sqlmodel
 pydantic_sqlalchemy
