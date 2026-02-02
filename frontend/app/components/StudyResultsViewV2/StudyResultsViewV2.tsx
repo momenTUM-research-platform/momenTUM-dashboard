@@ -589,7 +589,8 @@ export default function StudyResultsViewV2({ studyId }: Props) {
             <AdherencePanel
               studyId={studyId}
               userIds={effectiveUserIds.length ? effectiveUserIds : undefined}
-              from={from ? from.slice(0, 10) : undefined} // pass Y-M-D; panel normalizes both
+              moduleIds={moduleIds.length ? moduleIds : undefined}
+              from={from ? from.slice(0, 10) : undefined}
               to={to ? to.slice(0, 10) : undefined}
               mapping={userMap ?? undefined}
               mappingName={mappingLabel}

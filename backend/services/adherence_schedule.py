@@ -1,8 +1,8 @@
-# services/adherence_schedule.py
 from __future__ import annotations
+
 from dataclasses import dataclass
-from datetime import date, time, datetime, timedelta
-from typing import Dict, List, Optional
+from datetime import date, datetime, timedelta, time
+from typing import Dict, List, Optional, Any
 
 try:
     from zoneinfo import ZoneInfo  # py3.9+
@@ -14,9 +14,9 @@ except Exception:  # pragma: no cover
 class Occurrence:
     module_id: str
     module_name: str
-    date: str            # YYYY-MM-DD in local tz
-    start: str           # ISO8601 with tz
-    end: str             # ISO8601 with tz
+    date: str
+    start: str
+    end: str
 
 
 def _ymd(d: date) -> str:
@@ -24,10 +24,10 @@ def _ymd(d: date) -> str:
 
 
 def _parse_hms(hms: str) -> time:
-    parts = hms.split(":")
-    hh = int(parts[0])
-    mm = int(parts[1]) if len(parts) > 1 else 0
-    ss = int(parts[2]) if len(parts) > 2 else 0
+    parts = str(hms).strip().split(":")
+    hh = int(parts[0]) if len(parts) >= 1 and parts[0] else 0
+    mm = int(parts[1]) if len(parts) >= 2 and parts[1] else 0
+    ss = int(parts[2]) if len(parts) >= 3 and parts[2] else 0
     return time(hh, mm, ss)
 
 
@@ -35,33 +35,95 @@ def _localize(dt_naive: datetime, tz: ZoneInfo) -> datetime:
     return dt_naive.replace(tzinfo=tz)
 
 
-def expand_module_daily(module: Dict, start_date: date, end_date: date, tz: ZoneInfo) -> List[Occurrence]:
-    """Expand a 'daily' module into expected prompt instances within [start_date, end_date]."""
+def _norm_time_str(x: Any) -> Optional[str]:
+    if x is None:
+        return None
+    s = str(x).strip()
+    return s if s else None
+
+
+def _unique_times(alerts: Dict[str, Any]) -> List[str]:
+    times = alerts.get("times") or []
+    offset_time = alerts.get("offsetTime")
+    uniq: Dict[str, str] = {}
+
+    for t in times:
+        s = _norm_time_str(t)
+        if s:
+            uniq[s] = s
+
+    s0 = _norm_time_str(offset_time)
+    if s0:
+        uniq[s0] = s0
+
+    if not uniq:
+        return ["12:00:00"]
+
+    return sorted(uniq.keys(), key=lambda s: (_parse_hms(s).hour, _parse_hms(s).minute, _parse_hms(s).second))
+
+
+def _end_dt(start_dt: datetime, tz: ZoneInfo, timeout_enabled: bool, timeout_after_ms: int) -> datetime:
+    if timeout_enabled and timeout_after_ms > 0:
+        return start_dt + timedelta(milliseconds=timeout_after_ms)
+    return _localize(datetime(start_dt.year, start_dt.month, start_dt.day, 23, 59, 59), tz)
+
+
+def expand_module_daily(
+    module: Dict,
+    start_date: date,
+    end_date: date,
+    tz: ZoneInfo,
+    baseline_local_date: Optional[date],
+) -> List[Occurrence]:
     out: List[Occurrence] = []
     alerts = module.get("alerts") or {}
     if (alerts.get("repeat") or "").lower() != "daily":
         return out
 
-    interval_days = max(1, int(alerts.get("interval", 1)))
-    times = alerts.get("times") or ["12:00:00"]
+    anchor = baseline_local_date or start_date
 
-    # sticky => one per day (regardless of times)
+    try:
+        offset_days = int(alerts.get("offsetDays", 0))
+    except Exception:
+        offset_days = 0
+
+    try:
+        interval_days = max(1, int(alerts.get("interval", 1)))
+    except Exception:
+        interval_days = 1
+
+    try:
+        repeat_count = int(alerts.get("repeatCount", 0))
+    except Exception:
+        repeat_count = 0
+
+    total_days = max(1, repeat_count + 1)
+    first_day = anchor + timedelta(days=offset_days)
+    last_day = first_day + timedelta(days=(total_days - 1) * interval_days)
+
+    window_start = max(start_date, first_day)
+    window_end = min(end_date, last_day)
+    if window_end < window_start:
+        return out
+
     sticky = bool(alerts.get("sticky", False))
     timeout_enabled = bool(alerts.get("timeout", False))
     timeout_after_ms = int(alerts.get("timeoutAfter") or 0)
 
-    d = start_date
-    while d <= end_date:
+    times = _unique_times(alerts)
+    pick_time = times[0]
+
+    d = window_start
+    while d <= window_end:
+        if d < first_day:
+            d += timedelta(days=interval_days)
+            continue
+
         if sticky:
-            # pick the first configured time (or noon) as the "start"
-            t = times[0] if times else "12:00:00"
-            start_naive = datetime(d.year, d.month, d.day,
-                                   _parse_hms(t).hour, _parse_hms(t).minute, _parse_hms(t).second)
+            tt = _parse_hms(pick_time)
+            start_naive = datetime(d.year, d.month, d.day, tt.hour, tt.minute, tt.second)
             start_dt = _localize(start_naive, tz)
-            if timeout_enabled and timeout_after_ms > 0:
-                end_dt = start_dt + timedelta(milliseconds=timeout_after_ms)
-            else:
-                end_dt = _localize(datetime(d.year, d.month, d.day, 23, 59, 59), tz)
+            end_dt = _end_dt(start_dt, tz, timeout_enabled, timeout_after_ms)
 
             out.append(
                 Occurrence(
@@ -73,15 +135,11 @@ def expand_module_daily(module: Dict, start_date: date, end_date: date, tz: Zone
                 )
             )
         else:
-            # non-sticky => one per configured time
             for t in times:
                 tt = _parse_hms(t)
                 start_naive = datetime(d.year, d.month, d.day, tt.hour, tt.minute, tt.second)
                 start_dt = _localize(start_naive, tz)
-                if timeout_enabled and timeout_after_ms > 0:
-                    end_dt = start_dt + timedelta(milliseconds=timeout_after_ms)
-                else:
-                    end_dt = _localize(datetime(d.year, d.month, d.day, 23, 59, 59), tz)
+                end_dt = _end_dt(start_dt, tz, timeout_enabled, timeout_after_ms)
 
                 out.append(
                     Occurrence(
@@ -94,24 +152,8 @@ def expand_module_daily(module: Dict, start_date: date, end_date: date, tz: Zone
                 )
 
         d += timedelta(days=interval_days)
+
     return out
-
-
-def _parse_expected_enrollment_date(alerts: Dict, tz: ZoneInfo) -> Optional[date]:
-    s = (alerts.get("expectedEnrollmentDate") or "").strip()
-    if not s:
-        return None
-    try:
-        # interpret as local date in tz
-        dt = datetime.fromisoformat(s) if "T" in s else datetime.strptime(s, "%Y-%m-%d")
-        # if naive, make it local midnight
-        if dt.tzinfo is None:
-            dt = dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=tz)
-        else:
-            dt = dt.astimezone(tz)
-        return dt.date()
-    except Exception:
-        return None
 
 
 def expand_module_never(
@@ -121,21 +163,14 @@ def expand_module_never(
     tz: ZoneInfo,
     baseline_local_date: Optional[date],
 ) -> List[Occurrence]:
-    """
-    Expand a 'never' (one-off) module.
-    Anchor date priority:
-      1) alerts.expectedEnrollmentDate (in tz)
-      2) baseline_local_date (per-user, e.g., earliest response local date)
-    Apply offsetDays (default 0). Emit once if sticky; else one per configured time.
-    """
     out: List[Occurrence] = []
     alerts = module.get("alerts") or {}
     if (alerts.get("repeat") or "").lower() != "never":
         return out
 
-    anchor = _parse_expected_enrollment_date(alerts, tz) or baseline_local_date
+    anchor = baseline_local_date
     if anchor is None:
-        return out  # no way to place this one-off
+        return out
 
     try:
         offset_days = int(alerts.get("offsetDays", 0))
@@ -146,19 +181,16 @@ def expand_module_never(
     if not (start_date <= day <= end_date):
         return out
 
-    times = alerts.get("times") or ["12:00:00"]
+    times = _unique_times(alerts)
     sticky = bool(alerts.get("sticky", False))
     timeout_enabled = bool(alerts.get("timeout", False))
     timeout_after_ms = int(alerts.get("timeoutAfter") or 0)
 
-    def _make_occ(tstr: str):
+    def make_occ(tstr: str) -> Occurrence:
         tt = _parse_hms(tstr)
         start_naive = datetime(day.year, day.month, day.day, tt.hour, tt.minute, tt.second)
         start_dt = _localize(start_naive, tz)
-        if timeout_enabled and timeout_after_ms > 0:
-            end_dt = start_dt + timedelta(milliseconds=timeout_after_ms)
-        else:
-            end_dt = _localize(datetime(day.year, day.month, day.day, 23, 59, 59), tz)
+        end_dt = _end_dt(start_dt, tz, timeout_enabled, timeout_after_ms)
         return Occurrence(
             module_id=module["id"],
             module_name=module.get("name") or module["id"],
@@ -168,10 +200,10 @@ def expand_module_never(
         )
 
     if sticky:
-        out.append(_make_occ(times[0]))
+        out.append(make_occ(times[0]))
     else:
         for t in times:
-            out.append(_make_occ(t))
+            out.append(make_occ(t))
 
     return out
 
@@ -183,10 +215,9 @@ def expand_study_schedule(
     tz: ZoneInfo,
     baseline_local_date: Optional[date] = None,
 ) -> List[Occurrence]:
-    """Expand all modules between start_date and end_date."""
     occs: List[Occurrence] = []
     for mod in (study.get("modules") or []):
-        occs.extend(expand_module_daily(mod, start_date, end_date, tz))
+        occs.extend(expand_module_daily(mod, start_date, end_date, tz, baseline_local_date))
         occs.extend(expand_module_never(mod, start_date, end_date, tz, baseline_local_date))
     occs.sort(key=lambda o: (o.date, o.module_id, o.start))
     return occs

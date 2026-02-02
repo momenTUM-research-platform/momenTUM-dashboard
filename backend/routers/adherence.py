@@ -19,7 +19,6 @@ from services.adherence_schedule import expand_study_schedule
 
 router = APIRouter(prefix="/v2/adherence", tags=["adherence"])
 
-# --- Mongo ---
 MONGO_URL = os.getenv("MONGO_URL")
 MONGO_DB = os.getenv("MONGO_DB")
 if not MONGO_URL or not MONGO_DB:
@@ -30,7 +29,7 @@ db = client[MONGO_DB]
 studies_col = db["studies"]
 responses_col = db["responses"]
 
-# --- Models ---
+
 class OccurrenceOut(BaseModel):
     module_id: str
     module_name: str
@@ -51,9 +50,9 @@ class StructureCountOut(BaseModel):
     per_module: Dict[str, int]
     per_module_meta: Dict[str, ModuleMeta]
     total: int
+    max_offset_days: int
 
 
-# --- Helpers ---
 def _to_date(s: str, tz: ZoneInfo) -> date:
     try:
         if len(s) == 10 and s[4] == "-" and s[7] == "-":
@@ -78,55 +77,51 @@ def _fetch_study(study_id: str) -> Dict[str, Any]:
     return doc
 
 
-def _earliest_response_dt_for_user(study_id: str, user_id: str) -> Optional[datetime]:
-    cur = responses_col.find(
-        {"study_id": study_id, "user_id": user_id, "response_time": {"$ne": None}},
-        projection={"_id": 0, "response_time": 1},
-    ).sort([("response_time", ASCENDING)]).limit(1)
-
-    first = next(cur, None)
-    if not first:
+def _parse_dt(v: Any) -> Optional[datetime]:
+    if v is None:
         return None
-
-    rt = first.get("response_time")
-    if isinstance(rt, datetime):
-        return rt if rt.tzinfo else rt.replace(tzinfo=ZoneInfo("UTC"))
-    if isinstance(rt, str):
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=ZoneInfo("UTC"))
+    if isinstance(v, str):
         try:
-            dt = datetime.fromisoformat(rt.replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
             return dt if dt.tzinfo else dt.replace(tzinfo=ZoneInfo("UTC"))
         except Exception:
             return None
     return None
 
 
+def _earliest_baseline_dt_for_user(study_id: str, user_id: str) -> Optional[datetime]:
+    cur = responses_col.find(
+        {"study_id": study_id, "user_id": user_id},
+        projection={"_id": 0, "alert_time": 1, "response_time": 1},
+    ).sort([("alert_time", ASCENDING), ("response_time", ASCENDING)]).limit(50)
+
+    best: Optional[datetime] = None
+    for doc in cur:
+        cand = _parse_dt(doc.get("alert_time")) or _parse_dt(doc.get("response_time"))
+        if cand is None:
+            continue
+        if best is None or cand < best:
+            best = cand
+    return best
+
+
 def _infer_study_days_from_structure(study: Dict[str, Any]) -> int:
-    modules = study.get("modules") or []
-
     daily_days: list[int] = []
-
-    for m in modules:
+    for m in study.get("modules") or []:
         alerts = m.get("alerts") or {}
         if (alerts.get("repeat") or "").lower() != "daily":
             continue
-
         rc = alerts.get("repeatCount", None)
         if rc is None:
             continue
-
         try:
             rc_int = int(rc)
         except Exception:
             continue
-
-        # repeatCount is “number of repeats after the first”
-        # total days = repeatCount + 1
         daily_days.append(max(1, rc_int + 1))
-
-    if daily_days:
-        return max(daily_days)
-
-    return 7
+    return max(daily_days) if daily_days else 7
 
 
 def _times_len(alerts: Dict[str, Any]) -> int:
@@ -134,7 +129,20 @@ def _times_len(alerts: Dict[str, Any]) -> int:
     return len(ts)
 
 
-# --- Routes ---
+def _daily_occurrences_per_day(alerts: Dict[str, Any]) -> int:
+    times = alerts.get("times") or []
+    offset_time = alerts.get("offsetTime")
+
+    def norm(x: Any) -> str:
+        return str(x).strip()
+
+    uniq = {norm(t) for t in times if norm(t)}
+    if offset_time:
+        uniq.add(norm(offset_time))
+
+    return len(uniq) if uniq else 1
+
+
 @router.get("/expected", response_model=List[OccurrenceOut])
 def expected_windows(
     study_id: str = Query(...),
@@ -154,9 +162,9 @@ def expected_windows(
 
     baseline_local_date: Optional[date] = None
     if user_id:
-        first_dt = _earliest_response_dt_for_user(study_id, user_id)
-        if first_dt:
-            baseline_local_date = first_dt.astimezone(zone).date()
+        baseline_dt = _earliest_baseline_dt_for_user(study_id, user_id)
+        if baseline_dt:
+            baseline_local_date = baseline_dt.astimezone(zone).date()
 
     occs = expand_study_schedule(
         study,
@@ -165,7 +173,6 @@ def expected_windows(
         zone,
         baseline_local_date=baseline_local_date,
     )
-
     return [OccurrenceOut(**o.__dict__) for o in occs]
 
 
@@ -187,6 +194,8 @@ def structure_count(
     per_module_meta: Dict[str, ModuleMeta] = {}
     total = 0
 
+    max_offset_days = 0
+
     for mod in study.get("modules") or []:
         mid = mod.get("id")
         if not mid or mid in exclude:
@@ -194,6 +203,12 @@ def structure_count(
 
         name = (mod.get("name") or mid).strip()
         alerts = mod.get("alerts") or {}
+        try:
+            od = int(alerts.get("offsetDays", 0))
+        except Exception:
+            od = 0
+        if od > max_offset_days:
+            max_offset_days = od
         repeat = (alerts.get("repeat") or "").lower()
         sticky = bool(alerts.get("sticky", False))
 
@@ -218,17 +233,5 @@ def structure_count(
         per_module=per_module,
         per_module_meta=per_module_meta,
         total=total,
+        max_offset_days=max_offset_days,
     )
-
-def _daily_occurrences_per_day(alerts: Dict[str, Any]) -> int:
-    times = alerts.get("times") or []
-    offset_time = alerts.get("offsetTime")
-
-    def norm(x: Any) -> str:
-        return str(x).strip()
-
-    uniq = {norm(t) for t in times if norm(t)}
-    if offset_time:
-        uniq.add(norm(offset_time))
-
-    return len(uniq) if uniq else 1

@@ -1,0 +1,40 @@
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+  
+  .header {
+    margin: 0 0 1rem 0;
+    font-size: 1.6rem;
+    font-weight: 600;
+  }
+  
+  .subheader {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  
+  .card {
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.7);
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .row {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
+  }
+  
+  .label {
+    width: 120px;
+    opacity: 0.75;
+  }
+  
+  .value {
+    font-weight: 500;
+  }

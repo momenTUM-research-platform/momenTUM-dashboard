@@ -15,6 +15,10 @@ from pydantic import BaseModel
 from typing import List
 
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
 load_dotenv()
 router = APIRouter()
 
@@ -227,6 +231,31 @@ async def require_study_access(
         )
 
     return user
+
+@router.patch("/auth/change-password")
+async def change_my_password(
+    payload: ChangePasswordIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Verify current password
+    if not pwd_context.verify(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    # Validate new password
+    regex = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$"
+    if not __import__("re").match(regex, payload.new_password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters long and include uppercase, lowercase, and a number.",
+        )
+
+    if pwd_context.verify(payload.new_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="New password must be different")
+
+    user.hashed_password = pwd_context.hash(payload.new_password)
+    await db.commit()
+    return {"message": "Password updated"}
 
 @router.patch("/auth/users/{user_id}/studies")
 async def update_user_studies(
