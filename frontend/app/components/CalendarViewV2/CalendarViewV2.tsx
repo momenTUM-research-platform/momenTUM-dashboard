@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import type { CalendarApi } from "@fullcalendar/core"
 import FullCalendar, { EventClickArg } from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -96,6 +97,8 @@ export default function CalendarViewV2({ rows, mapping, mappingName = "Mapped ID
   const [selectedViewerNote, setSelectedViewerNote] = useState<{ user: string; note: string } | null>(null);
   const [notes, setNotes] = useState<Record<string, { [user: string]: string }>>({});
   const [allUsers, setAllUsers] = useState<string[]>([]); // for NoteModal selector
+  const calendarRef = useRef<FullCalendar | null>(null);
+  const lastAutoGoto = useRef<string | null>(null);
 
   // Load/save notes
   useEffect(() => {
@@ -184,6 +187,28 @@ export default function CalendarViewV2({ rows, mapping, mappingName = "Mapped ID
     });
   }, [rows, mapping]);
 
+  useEffect(() => {
+    if (!rows?.length) return;
+  
+    // latest response_time across current (filtered) rows
+    const latestMs = rows
+      .map(r => +new Date(r.response_time))
+      .reduce((a, b) => Math.max(a, b), 0);
+  
+    const latestDate = new Date(latestMs);
+    const api: CalendarApi | undefined = calendarRef.current?.getApi?.();
+  
+    console.log("[Calendar] rows:", rows.length, "latestDate:", latestDate.toISOString(), "api:", !!api);
+  
+    requestAnimationFrame(() => {
+      const api2: CalendarApi | undefined = calendarRef.current?.getApi?.();
+      if (!api2) return;
+  
+      api2.gotoDate(latestDate);
+      console.log("[Calendar] gotoDate() done");
+    });
+  }, [rows]);
+
   // Click opens EventDetail
   const handleEventClick = (arg: EventClickArg) => {
     const b = arg.event.extendedProps as Bucket;
@@ -210,6 +235,7 @@ export default function CalendarViewV2({ rows, mapping, mappingName = "Mapped ID
   return (
     <div className={styles.wrapper}>
       <FullCalendar
+        ref={calendarRef}
         key={JSON.stringify(notes)} // re-render day cells when notes change
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
         initialView="dayGridMonth"
