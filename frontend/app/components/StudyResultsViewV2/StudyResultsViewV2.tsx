@@ -8,7 +8,6 @@ import {
   fetchUserMapping,
   Facets,
   StudyQuestion,
-  MappingMode,
 } from "@/app/lib/responses";
 import { LabeledSurveyResponseOut } from "@/app/types/schemas";
 import TableViewV2 from "@/app/components/TableViewV2/TableViewV2";
@@ -43,7 +42,6 @@ export default function StudyResultsViewV2({ studyId }: Props) {
 
   // mapping selection (which question is used to derive mapping per user)
   const [mapKey, setMapKey] = useState<string>("");              // `${module_id}:${question_id}`
-  const [mapMode, setMapMode] = useState<MappingMode>("latest"); // "latest" | "earliest"
   const [userMap, setUserMap] = useState<Record<string, string> | null>(null); // user_id -> mapped label
 
   // view + paging
@@ -169,7 +167,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
 
     setMappingLoading(true);
     try {
-      const m = await fetchUserMapping(studyId, { module_id, question_id, mode: mapMode });
+      const m = await fetchUserMapping(studyId, { module_id, question_id });
       setUserMap(m);
       // keep mappedIds if they are still valid labels; drop anything that disappeared
       setMappedIds((prev) => {
@@ -211,7 +209,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
   useEffect(() => {
     loadMapping();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studyId, mapKey, mapMode]);
+  }, [studyId, mapKey]);
 
   const toggleUser = (v: string) =>
     setUserIds((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
@@ -225,11 +223,31 @@ export default function StudyResultsViewV2({ studyId }: Props) {
   const chevronBg =
     "url(\"data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%236b7280' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")";
 
+  function looksLikeIdentifierQuestion(q: StudyQuestion) {
+    const hay = [
+      q.question_text,
+      q.question_id,
+      q.module_name,
+      q.module_id,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  
+    // avoid matching random words containing "id" (like "did", "mid", etc.)
+    const idWord = /\b(id|ids)\b/;
+    const common = /(participant|study|subject|user|app|record)\s*id\b/;
+  
+    return common.test(hay) || idWord.test(hay) || hay.includes("_id");
+  }
+
   // group questions by module for a tidy select
   const questionsByModule = useMemo(() => {
     if (!questions) return [];
+    const filtered = questions.filter(looksLikeIdentifierQuestion);
+
     const map = new Map<string, { module_id: string; module_name: string; items: StudyQuestion[] }>();
-    for (const q of questions) {
+    for (const q of filtered) {
       if (!map.has(q.module_id)) {
         map.set(q.module_id, { module_id: q.module_id, module_name: q.module_name, items: [] });
       }
@@ -358,27 +376,9 @@ export default function StudyResultsViewV2({ studyId }: Props) {
               {mappingLoading
                 ? "Loading mapping…"
                 : selectedQuestion
-                ? `Using: ${selectedQuestion.question_text} (${mapMode})`
+                ? `Using: ${selectedQuestion.question_text}`
                 : "No mapping selected"}
             </span>
-            {mapKey && (
-              <div className={styles.segment} role="group" aria-label="Mapping mode">
-                <button
-                  type="button"
-                  onClick={() => setMapMode("latest")}
-                  className={`${styles.segmentBtn} ${mapMode === "latest" ? styles.segmentBtnActive : ""}`}
-                >
-                  Latest
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMapMode("earliest")}
-                  className={`${styles.segmentBtn} ${mapMode === "earliest" ? styles.segmentBtnActive : ""}`}
-                >
-                  Earliest
-                </button>
-              </div>
-            )}
           </div>
         </div>
 

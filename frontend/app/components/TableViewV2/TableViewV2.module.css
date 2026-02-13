@@ -1,101 +1,207 @@
+/* Layout */
+
 .wrapper {
-    margin-top: 1rem;
-  }
-  
-  .toolbar {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 0.75rem;
-  }
-  
-  .groupToggle {
-    display: inline-flex;
-    gap: 0.5rem;
-  }
-  
-  .toggleBtn {
-    padding: 0.45rem 0.9rem;
-    font-size: 0.9rem;
-    background-color: #f7fafc;
-    color: #2d3748;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    cursor: pointer;
-  }
-  
-  .toggleBtn.active {
-    background-color: #2d3748;
-    color: #fff;
-    border-color: #2d3748;
-  }
-  
-  .block {
-    margin-bottom: 1rem;
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 0.75rem;
-  }
-  
-  .blockTitle {
-    margin: 0 0 0.5rem 0;
-    font-size: 1rem;
-    color: #2d3748;
-  }
-  
-  .tableWrap {
-    overflow-x: auto;
-  }
-  
-  .table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    font-size: 0.92rem;
-  }
-  
-  .th {
-    text-align: left;
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
-    padding: 0.6rem 0.75rem;
-  }
-  
-  .row {
-    border-top: 1px solid #edf2f7;
-  }
-  
-  .td {
-    padding: 0.6rem 0.75rem;
-    vertical-align: top;
-    word-wrap: break-word;
-    white-space: normal;
-  }
-  
-  .answerList {
-    margin: 0;
-    padding-left: 1rem;
-  }
-  
-  .answerItem {
-    margin: 0.15rem 0;
-    padding: 0.15rem 0.35rem;
-    border-radius: 4px;
-  }
-  
-  .answerEmpty {
-    background-color: #fdecea; /* subtle light red */
-  }
-  
-  .answerFilled {
-    background-color: #e6f4ea; /* subtle light green */
-  }
-  
-  .qLabel {
-    font-weight: 600;
-    color: #2d3748;
-  }
-  
-  .qValue {
-    color: #1a202c;
-  }
+  margin-top: 1rem;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 3rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.controlBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 220px;
+}
+
+.controlLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+  margin-bottom: 0.4rem;
+}
+
+
+/* Segmented Buttons */
+
+.segment {
+  display: inline-flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.segmentBtn {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  background: #f9fafb;
+  color: #374151;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.segmentBtn:not(:last-child) {
+  border-right: 1px solid #e5e7eb;
+}
+
+.segmentBtn:hover {
+  background: #f3f4f6;
+}
+
+.segmentBtn.active {
+  background: #2d3748;
+  color: #ffffff;
+}
+
+.segmentBtn:disabled {
+  background: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+
+/* Select Controls */
+
+.groupRow {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.selectGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.selectLabel {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 0.25rem;
+}
+
+.select {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+}
+
+.select:disabled {
+  background: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+
+/* Group Blocks */
+
+.block {
+  margin-bottom: 1rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.blockTitle {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.subBlock {
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: #fafafa;
+}
+
+.subTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0.25rem 0 0.5rem;
+}
+
+
+/* Table */
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.92rem;
+}
+
+.th {
+  text-align: left;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.6rem 0.75rem;
+  color: #374151;
+  font-weight: 600;
+}
+
+.row {
+  border-top: 1px solid #edf2f7;
+}
+
+.td {
+  padding: 0.6rem 0.75rem;
+  vertical-align: top;
+  word-wrap: break-word;
+  white-space: normal;
+  color: #1f2937;
+}
+
+
+/* Answers */
+
+.answerList {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.answerItem {
+  margin: 0.15rem 0;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+}
+
+.answerEmpty {
+  background-color: #fdecea;
+  color: #7f1d1d;
+}
+
+.answerFilled {
+  background-color: #e6f4ea;
+  color: #065f46;
+}
+
+.qLabel {
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.qValue {
+  color: #1f2937;
+}
