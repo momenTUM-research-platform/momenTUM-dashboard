@@ -13,6 +13,7 @@ from partial_search import router as partial_search_studies
 from routers.studies_responses_v2 import router as responses_v2_router
 from routers.studies_responses_labeled import router as responses_labeled_router
 from routers.adherence import router as adherence_router
+from routers.events import router as events
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,6 +27,7 @@ app.include_router(partial_search_studies, prefix="/api")
 app.include_router(responses_v2_router, prefix="/api")
 app.include_router(responses_labeled_router, prefix="/api")
 app.include_router(adherence_router, prefix="/api")
+app.include_router(events, prefix="/api")
 
 # MongoDB (used for /api/studies)
 MONGO_URL = os.getenv("MONGO_URL")

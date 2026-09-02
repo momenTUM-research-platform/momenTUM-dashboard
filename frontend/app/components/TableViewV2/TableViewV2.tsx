@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import styles from "./TableViewV2.module.css";
 import { LabeledSurveyResponseOut } from "@/app/types/schemas";
+import ResponseValue from "@/app/components/ResponseValue/ResponseValue";
 
 type Mapping = Record<string, string>;
 
@@ -221,7 +222,7 @@ export default function TableViewV2({
                             {a.question_text ?? a.question_id}:
                           </span>{" "}
                           <span className={styles.qValue}>
-                            {empty ? "—" : String(a.answer)}
+                            {empty ? "—" : <ResponseValue value={a.answer} />}
                           </span>
                         </li>
                       );
@@ -274,7 +275,7 @@ export default function TableViewV2({
                     empty ? styles.answerEmpty : styles.answerFilled
                   }`}
                 >
-                  {empty ? "—" : String(r.answer)}
+                  {empty ? "—" : <ResponseValue value={r.answer} />}
                 </td>
               </tr>
             );

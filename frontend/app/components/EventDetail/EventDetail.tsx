@@ -2,6 +2,7 @@
 
 import React from "react";
 import styles from "./EventDetail.module.css";
+import ResponseValue from "@/app/components/ResponseValue/ResponseValue";
 
 // Define the extended event properties to be used by the event detail modal.
 export interface ExtendedEventProps {
@@ -100,9 +101,7 @@ const EventDetail: React.FC<EventDetailProps> = ({ isOpen, onClose, eventData })
                               : styles.answerFilled
                           }
                         >
-                          {Array.isArray(answers[0])
-                            ? answers[0].join(", ")
-                            : String(answers[0])}
+                        <ResponseValue value={answers[0]} />
                         </td>
                         <td>
                           {responseTimes[0]
@@ -119,7 +118,7 @@ const EventDetail: React.FC<EventDetailProps> = ({ isOpen, onClose, eventData })
                                 : styles.answerFilled
                             }
                           >
-                            {Array.isArray(ans) ? ans.join(", ") : String(ans)}
+                            <ResponseValue value={ans} />
                           </td>
                           <td>
                             {responseTimes[idx + 1]
@@ -132,9 +131,9 @@ const EventDetail: React.FC<EventDetailProps> = ({ isOpen, onClose, eventData })
                   );
                 } else {
                   // For a single answer (or if value is not an aggregated QA object)
-                  const answer = Array.isArray(value)
-                    ? value.join(", ")
-                    : String(value);
+                  // const answer = Array.isArray(value)
+                  //   ? value.join(", ")
+                  //   : String(value);
                   return (
                     <tr key={question}>
                       <td>{question}</td>
@@ -145,7 +144,7 @@ const EventDetail: React.FC<EventDetailProps> = ({ isOpen, onClose, eventData })
                             : styles.answerFilled
                         }
                       >
-                        {answer}
+                        <ResponseValue value={value} />
                       </td>
                       <td></td>
                     </tr>

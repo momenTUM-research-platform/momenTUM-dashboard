@@ -14,6 +14,7 @@ import TableViewV2 from "@/app/components/TableViewV2/TableViewV2";
 import CalendarViewV2 from "@/app/components/CalendarViewV2/CalendarViewV2";
 import SleepVizPanel from "@/app/components/SleepViz/SleepVizPanel";
 import AdherencePanel from "../AdherencePanel/AdherencePanel";
+import EventTimeline from "../EventTimeline/EventTimeline";
 import styles from "./StudyResultsViewV2.module.css";
 
 type Props = { studyId: string };
@@ -45,7 +46,7 @@ export default function StudyResultsViewV2({ studyId }: Props) {
   const [userMap, setUserMap] = useState<Record<string, string> | null>(null); // user_id -> mapped label
 
   // view + paging
-  const [activeView, setActiveView] = useState<"table" | "calendar" | "visualize" | "adherence">("table");
+  const [activeView, setActiveView] = useState<"table" | "calendar" | "visualize" | "adherence" | "events">("table");
   const [page, setPage] = useState(1);
   const TABLE_PAGE_SIZE = 100;
   const CALENDAR_LIMIT = 5000;
@@ -106,15 +107,15 @@ export default function StudyResultsViewV2({ studyId }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const isCalendar = activeView === "calendar";
+      const isLargeView = activeView === "calendar" || activeView === "events";
       const res = await fetchLabeledResponses(studyId, {
         user_id: effectiveUserIds.length ? effectiveUserIds : undefined,
         module_id: moduleIds.length ? moduleIds : undefined,
         from: from || undefined,
         to: to || undefined,
         sort: "desc",
-        skip: isCalendar ? 0 : (pageArg - 1) * TABLE_PAGE_SIZE,
-        limit: isCalendar ? CALENDAR_LIMIT : TABLE_PAGE_SIZE,
+        skip: isLargeView ? 0 : (pageArg - 1) * TABLE_PAGE_SIZE,
+        limit: isLargeView ? CALENDAR_LIMIT : TABLE_PAGE_SIZE,
       });
       setRows(res);
     } catch (e: any) {
@@ -309,6 +310,18 @@ export default function StudyResultsViewV2({ studyId }: Props) {
             className={`${styles.segmentBtn} ${activeView === "adherence" ? styles.segmentBtnActive : ""}`}
           >
             Adherence
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeView === "events"}
+            onClick={() => setActiveView("events")}
+            className={`${styles.segmentBtn} ${
+              activeView === "events"
+                ? styles.segmentBtnActive
+                : ""
+            }`}
+          >
+            Events
           </button>
         </div>
 
@@ -584,14 +597,50 @@ export default function StudyResultsViewV2({ studyId }: Props) {
               mapping={userMap ?? undefined}
               mappingName={mappingLabel}
             />
-          ) : (
-            // adherence view
+          ) : activeView === "adherence" ? (
             <AdherencePanel
               studyId={studyId}
-              userIds={effectiveUserIds.length ? effectiveUserIds : undefined}
-              moduleIds={moduleIds.length ? moduleIds : undefined}
-              from={from ? from.slice(0, 10) : undefined}
-              to={to ? to.slice(0, 10) : undefined}
+              userIds={
+                effectiveUserIds.length
+                  ? effectiveUserIds
+                  : undefined
+              }
+              moduleIds={
+                moduleIds.length
+                  ? moduleIds
+                  : undefined
+              }
+              from={
+                from
+                  ? from.slice(0, 10)
+                  : undefined
+              }
+              to={
+                to
+                  ? to.slice(0, 10)
+                  : undefined
+              }
+              mapping={
+                userMap ?? undefined
+              }
+              mappingName={mappingLabel}
+            />
+          ) : (
+            <EventTimeline
+              studyId={studyId}
+              rows={rows}
+              userIds={
+                effectiveUserIds.length
+                  ? effectiveUserIds
+                  : undefined
+              }
+              moduleIds={
+                moduleIds.length
+                  ? moduleIds
+                  : undefined
+              }
+              from={from || undefined}
+              to={to || undefined}
               mapping={userMap ?? undefined}
               mappingName={mappingLabel}
             />
