@@ -6,7 +6,19 @@ import {
 } from "react";
 
 import ResponseValue from "@/app/components/ResponseValue/ResponseValue";
-import { LabeledSurveyResponseOut } from "@/app/types/schemas";
+
+import {
+  findStudyQuestion,
+  formatAnswerForDisplay,
+} from "@/app/lib/answerDisplay";
+
+import {
+  StudyQuestion,
+} from "@/app/lib/responses";
+
+import {
+  LabeledSurveyResponseOut,
+} from "@/app/types/schemas";
 
 import styles from "./TableViewV2.module.css";
 
@@ -16,9 +28,17 @@ type Mapping = Record<
 >;
 
 type Props = {
-  rows: LabeledSurveyResponseOut[];
-  mapping?: Mapping;
-  mappingName?: string;
+  rows:
+    LabeledSurveyResponseOut[];
+
+  questions?:
+    StudyQuestion[];
+
+  mapping?:
+    Mapping;
+
+  mappingName?:
+    string;
 };
 
 type ViewMode =
@@ -33,15 +53,30 @@ type GroupKey =
   | "question";
 
 type FlatRow = {
-  response_time: string;
+  response_time:
+    string;
+
   alert_time:
     | string
     | null;
-  user_id: string;
-  module_name: string;
-  question_text: string;
-  question_id: string;
-  answer: unknown;
+
+  user_id:
+    string;
+
+  module_id:
+    string;
+
+  module_name:
+    string;
+
+  question_text:
+    string;
+
+  question_id:
+    string;
+
+  answer:
+    unknown;
 };
 
 function isEmpty(
@@ -82,7 +117,9 @@ function formatDateTime(
     | null
     | undefined,
 ): string {
-  if (!value) {
+  if (
+    !value
+  ) {
     return "—";
   }
 
@@ -102,28 +139,42 @@ function formatDateTime(
   return date.toLocaleString(
     undefined,
     {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+      year:
+        "numeric",
+
+      month:
+        "short",
+
+      day:
+        "numeric",
+
+      hour:
+        "2-digit",
+
+      minute:
+        "2-digit",
     },
   );
 }
 
 function groupLabelForResponseRow(
-  row: LabeledSurveyResponseOut,
-  key: GroupKey,
-  mapping?: Mapping,
+  row:
+    LabeledSurveyResponseOut,
+  key:
+    GroupKey,
+  mapping?:
+    Mapping,
 ): string {
   if (
-    key === "none"
+    key ===
+    "none"
   ) {
     return "All";
   }
 
   if (
-    key === "module"
+    key ===
+    "module"
   ) {
     return (
       row.module_name ??
@@ -133,7 +184,8 @@ function groupLabelForResponseRow(
   }
 
   if (
-    key === "mapped"
+    key ===
+    "mapped"
   ) {
     return (
       mapping?.[
@@ -147,24 +199,30 @@ function groupLabelForResponseRow(
 }
 
 function groupLabelForFlatRow(
-  row: FlatRow,
-  key: GroupKey,
-  mapping?: Mapping,
+  row:
+    FlatRow,
+  key:
+    GroupKey,
+  mapping?:
+    Mapping,
 ): string {
   if (
-    key === "none"
+    key ===
+    "none"
   ) {
     return "All";
   }
 
   if (
-    key === "question"
+    key ===
+    "question"
   ) {
     return row.question_text;
   }
 
   if (
-    key === "module"
+    key ===
+    "module"
   ) {
     return (
       row.module_name ??
@@ -173,7 +231,8 @@ function groupLabelForFlatRow(
   }
 
   if (
-    key === "mapped"
+    key ===
+    "mapped"
   ) {
     return (
       mapping?.[
@@ -187,10 +246,11 @@ function groupLabelForFlatRow(
 }
 
 function sortGroupEntries<T>(
-  map: Map<
-    string,
-    T[]
-  >,
+  map:
+    Map<
+      string,
+      T[]
+    >,
 ) {
   return Array.from(
     map.entries(),
@@ -205,16 +265,46 @@ function sortGroupEntries<T>(
   );
 }
 
+function prepareDisplayValue(
+  value:
+    unknown,
+  question?:
+    StudyQuestion,
+): unknown {
+  const formatted =
+    formatAnswerForDisplay(
+      value,
+      question,
+    );
+
+  if (
+    Array.isArray(
+      formatted,
+    ) &&
+    question
+      ?.option_labels
+  ) {
+    return formatted.join(
+      ", ",
+    );
+  }
+
+  return formatted;
+}
+
 export default function TableViewV2({
   rows,
+  questions = [],
   mapping,
-  mappingName = "Mapped ID",
+  mappingName =
+    "Mapped ID",
 }: Props) {
   const hasMapping =
     !!mapping &&
     Object.keys(
       mapping,
-    ).length > 0;
+    ).length >
+      0;
 
   const [
     viewMode,
@@ -252,9 +342,13 @@ export default function TableViewV2({
       }
 
       return rows.flatMap(
-        (row) =>
+        (
+          row,
+        ) =>
           row.answers.map(
-            (answer) => ({
+            (
+              answer,
+            ) => ({
               response_time:
                 row.response_time,
 
@@ -264,6 +358,9 @@ export default function TableViewV2({
 
               user_id:
                 row.user_id,
+
+              module_id:
+                row.module_id,
 
               module_name:
                 row.module_name ??
@@ -287,108 +384,271 @@ export default function TableViewV2({
     ]);
 
   const groupOptions =
-    useMemo(() => {
-      const base: Array<{
-        value: GroupKey;
-        label: string;
-        hidden?: boolean;
-      }> = [
-        {
-          value: "none",
-          label: "None",
-        },
-        {
-          value: "user",
-          label: "User",
-        },
-        {
-          value: "module",
-          label: "Module",
-        },
-        {
-          value: "mapped",
-          label: mappingName,
-          hidden:
-            !hasMapping,
-        },
-        {
-          value: "question",
-          label: "Question",
-          hidden:
-            viewMode !==
-            "question",
-        },
-      ];
+    useMemo(
+      () => {
+        const base: Array<{
+          value:
+            GroupKey;
 
-      return base.filter(
-        (option) =>
-          !option.hidden,
-      );
-    }, [
-      hasMapping,
-      mappingName,
-      viewMode,
-    ]);
+          label:
+            string;
+
+          hidden?:
+            boolean;
+        }> = [
+          {
+            value:
+              "none",
+
+            label:
+              "None",
+          },
+          {
+            value:
+              "user",
+
+            label:
+              "User",
+          },
+          {
+            value:
+              "module",
+
+            label:
+              "Module",
+          },
+          {
+            value:
+              "mapped",
+
+            label:
+              mappingName,
+
+            hidden:
+              !hasMapping,
+          },
+          {
+            value:
+              "question",
+
+            label:
+              "Question",
+
+            hidden:
+              viewMode !==
+              "question",
+          },
+        ];
+
+        return base.filter(
+          (
+            option,
+          ) =>
+            !option.hidden,
+        );
+      },
+      [
+        hasMapping,
+        mappingName,
+        viewMode,
+      ],
+    );
 
   const effectiveSecondary =
-    useMemo<GroupKey>(() => {
-      if (
-        primaryGroupBy ===
-        "none"
-      ) {
-        return "none";
-      }
+    useMemo<GroupKey>(
+      () => {
+        if (
+          primaryGroupBy ===
+          "none"
+        ) {
+          return "none";
+        }
 
-      if (
-        secondaryGroupBy ===
-        primaryGroupBy
-      ) {
-        return "none";
-      }
+        if (
+          secondaryGroupBy ===
+          primaryGroupBy
+        ) {
+          return "none";
+        }
 
-      if (
-        viewMode !==
-          "question" &&
-        secondaryGroupBy ===
-          "question"
-      ) {
-        return "none";
-      }
+        if (
+          viewMode !==
+            "question" &&
+          secondaryGroupBy ===
+            "question"
+        ) {
+          return "none";
+        }
 
-      if (
-        !hasMapping &&
-        secondaryGroupBy ===
-          "mapped"
-      ) {
-        return "none";
-      }
+        if (
+          !hasMapping &&
+          secondaryGroupBy ===
+            "mapped"
+        ) {
+          return "none";
+        }
 
-      return secondaryGroupBy;
-    }, [
-      primaryGroupBy,
-      secondaryGroupBy,
-      viewMode,
-      hasMapping,
-    ]);
+        return secondaryGroupBy;
+      },
+      [
+        primaryGroupBy,
+        secondaryGroupBy,
+        viewMode,
+        hasMapping,
+      ],
+    );
 
   const grouped =
-    useMemo(() => {
-      if (
-        viewMode ===
-        "response"
-      ) {
+    useMemo(
+      () => {
+        if (
+          viewMode ===
+          "response"
+        ) {
+          const primary =
+            new Map<
+              string,
+              LabeledSurveyResponseOut[]
+            >();
+
+          for (
+            const row of
+            rows
+          ) {
+            const label =
+              groupLabelForResponseRow(
+                row,
+                primaryGroupBy,
+                mapping,
+              );
+
+            if (
+              !primary.has(
+                label,
+              )
+            ) {
+              primary.set(
+                label,
+                [],
+              );
+            }
+
+            primary
+              .get(
+                label,
+              )!
+              .push(
+                row,
+              );
+          }
+
+          const output: Array<{
+            label:
+              string;
+
+            items:
+              | LabeledSurveyResponseOut[]
+              | Map<
+                  string,
+                  LabeledSurveyResponseOut[]
+                >;
+
+            isNested:
+              boolean;
+          }> =
+            [];
+
+          for (
+            const [
+              primaryLabel,
+              primaryItems,
+            ] of
+            sortGroupEntries(
+              primary,
+            )
+          ) {
+            if (
+              effectiveSecondary ===
+              "none"
+            ) {
+              output.push({
+                label:
+                  primaryLabel,
+
+                items:
+                  primaryItems,
+
+                isNested:
+                  false,
+              });
+
+              continue;
+            }
+
+            const secondary =
+              new Map<
+                string,
+                LabeledSurveyResponseOut[]
+              >();
+
+            for (
+              const row of
+              primaryItems
+            ) {
+              const label =
+                groupLabelForResponseRow(
+                  row,
+                  effectiveSecondary,
+                  mapping,
+                );
+
+              if (
+                !secondary.has(
+                  label,
+                )
+              ) {
+                secondary.set(
+                  label,
+                  [],
+                );
+              }
+
+              secondary
+                .get(
+                  label,
+                )!
+                .push(
+                  row,
+                );
+            }
+
+            output.push({
+              label:
+                primaryLabel,
+
+              items:
+                secondary,
+
+              isNested:
+                true,
+            });
+          }
+
+          return output;
+        }
+
         const primary =
           new Map<
             string,
-            LabeledSurveyResponseOut[]
+            FlatRow[]
           >();
 
         for (
           const row of
-          rows
+          flatRows
         ) {
           const label =
-            groupLabelForResponseRow(
+            groupLabelForFlatRow(
               row,
               primaryGroupBy,
               mapping,
@@ -415,15 +675,20 @@ export default function TableViewV2({
         }
 
         const output: Array<{
-          label: string;
+          label:
+            string;
+
           items:
-            | LabeledSurveyResponseOut[]
+            | FlatRow[]
             | Map<
                 string,
-                LabeledSurveyResponseOut[]
+                FlatRow[]
               >;
-          isNested: boolean;
-        }> = [];
+
+          isNested:
+            boolean;
+        }> =
+          [];
 
         for (
           const [
@@ -455,7 +720,7 @@ export default function TableViewV2({
           const secondary =
             new Map<
               string,
-              LabeledSurveyResponseOut[]
+              FlatRow[]
             >();
 
           for (
@@ -463,7 +728,7 @@ export default function TableViewV2({
             primaryItems
           ) {
             const label =
-              groupLabelForResponseRow(
+              groupLabelForFlatRow(
                 row,
                 effectiveSecondary,
                 mapping,
@@ -502,174 +767,51 @@ export default function TableViewV2({
         }
 
         return output;
-      }
-
-      const primary =
-        new Map<
-          string,
-          FlatRow[]
-        >();
-
-      for (
-        const row of
-        flatRows
-      ) {
-        const label =
-          groupLabelForFlatRow(
-            row,
-            primaryGroupBy,
-            mapping,
-          );
-
-        if (
-          !primary.has(
-            label,
-          )
-        ) {
-          primary.set(
-            label,
-            [],
-          );
-        }
-
-        primary
-          .get(
-            label,
-          )!
-          .push(
-            row,
-          );
-      }
-
-      const output: Array<{
-        label: string;
-        items:
-          | FlatRow[]
-          | Map<
-              string,
-              FlatRow[]
-            >;
-        isNested: boolean;
-      }> = [];
-
-      for (
-        const [
-          primaryLabel,
-          primaryItems,
-        ] of
-        sortGroupEntries(
-          primary,
-        )
-      ) {
-        if (
-          effectiveSecondary ===
-          "none"
-        ) {
-          output.push({
-            label:
-              primaryLabel,
-
-            items:
-              primaryItems,
-
-            isNested:
-              false,
-          });
-
-          continue;
-        }
-
-        const secondary =
-          new Map<
-            string,
-            FlatRow[]
-          >();
-
-        for (
-          const row of
-          primaryItems
-        ) {
-          const label =
-            groupLabelForFlatRow(
-              row,
-              effectiveSecondary,
-              mapping,
-            );
-
-          if (
-            !secondary.has(
-              label,
-            )
-          ) {
-            secondary.set(
-              label,
-              [],
-            );
-          }
-
-          secondary
-            .get(
-              label,
-            )!
-            .push(
-              row,
-            );
-        }
-
-        output.push({
-          label:
-            primaryLabel,
-
-          items:
-            secondary,
-
-          isNested:
-            true,
-        });
-      }
-
-      return output;
-    }, [
-      rows,
-      flatRows,
-      viewMode,
-      primaryGroupBy,
-      effectiveSecondary,
-      mapping,
-    ]);
-
-  const setMode = (
-    mode: ViewMode,
-  ) => {
-    setViewMode(
-      mode,
+      },
+      [
+        rows,
+        flatRows,
+        viewMode,
+        primaryGroupBy,
+        effectiveSecondary,
+        mapping,
+      ],
     );
 
-    if (
-      mode ===
-      "response"
-    ) {
+  const setMode =
+    (
+      mode:
+        ViewMode,
+    ) => {
+      setViewMode(
+        mode,
+      );
+
+      if (
+        mode ===
+        "response"
+      ) {
+        setPrimaryGroupBy(
+          "none",
+        );
+
+        setSecondaryGroupBy(
+          "none",
+        );
+
+        return;
+      }
+
       setPrimaryGroupBy(
-        "none",
+        "question",
       );
 
       setSecondaryGroupBy(
-        "none",
+        hasMapping
+          ? "mapped"
+          : "user",
       );
-
-      return;
-    }
-
-    setPrimaryGroupBy(
-      "question",
-    );
-
-    setSecondaryGroupBy(
-      hasMapping
-        ? "mapped"
-        : "user",
-    );
-  };
+    };
 
   const renderResponseTable =
     (
@@ -779,7 +921,9 @@ export default function TableViewV2({
                         styles.td
                       }
                     >
-                      {userCell}
+                      {
+                        userCell
+                      }
                     </td>
 
                     <td
@@ -810,6 +954,21 @@ export default function TableViewV2({
                               isEmpty(
                                 answer.answer,
                               );
+
+                            const question =
+                              findStudyQuestion(
+                                questions,
+                                row.module_id,
+                                answer.question_id,
+                              );
+
+                            const displayValue =
+                              empty
+                                ? answer.answer
+                                : prepareDisplayValue(
+                                    answer.answer,
+                                    question,
+                                  );
 
                             return (
                               <li
@@ -845,7 +1004,7 @@ export default function TableViewV2({
                                   ) : (
                                     <ResponseValue
                                       value={
-                                        answer.answer
+                                        displayValue
                                       }
                                     />
                                   )}
@@ -957,9 +1116,24 @@ export default function TableViewV2({
                     row.answer,
                   );
 
+                const question =
+                  findStudyQuestion(
+                    questions,
+                    row.module_id,
+                    row.question_id,
+                  );
+
+                const displayValue =
+                  empty
+                    ? row.answer
+                    : prepareDisplayValue(
+                        row.answer,
+                        question,
+                      );
+
                 return (
                   <tr
-                    key={`${row.user_id}-${row.question_id}-${row.response_time}-${rowIndex}`}
+                    key={`${row.user_id}-${row.module_id}-${row.question_id}-${row.response_time}-${rowIndex}`}
                   >
                     <td
                       className={
@@ -986,7 +1160,9 @@ export default function TableViewV2({
                         styles.td
                       }
                     >
-                      {userCell}
+                      {
+                        userCell
+                      }
                     </td>
 
                     <td
@@ -1027,7 +1203,7 @@ export default function TableViewV2({
                       ) : (
                         <ResponseValue
                           value={
-                            row.answer
+                            displayValue
                           }
                         />
                       )}
@@ -1150,8 +1326,7 @@ export default function TableViewV2({
                   event,
                 ) => {
                   const value =
-                    event
-                      .target
+                    event.target
                       .value as GroupKey;
 
                   setPrimaryGroupBy(
@@ -1215,8 +1390,7 @@ export default function TableViewV2({
                   event,
                 ) =>
                   setSecondaryGroupBy(
-                    event
-                      .target
+                    event.target
                       .value as GroupKey,
                   )
                 }

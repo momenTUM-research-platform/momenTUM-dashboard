@@ -17,6 +17,7 @@ type DashboardUser = {
   username: string;
   name?: string | null;
   surname?: string | null;
+  role?: string | null;
 };
 
 type DashboardStudy = {
@@ -74,6 +75,9 @@ const Dashboard: React.FC<
     useRef<
       HTMLDivElement | null
     >(null);
+
+  const isAdmin =
+    user.role === "admin";
 
   useEffect(() => {
     const storedToken =
@@ -141,6 +145,10 @@ const Dashboard: React.FC<
     async (
       studyId: string
     ) => {
+      if (!isAdmin) {
+        return;
+      }
+
       if (!token) {
         setDeleteMessage(
           "Authentication token not available."
@@ -261,24 +269,24 @@ const Dashboard: React.FC<
     ) {
       return;
     }
-  
+
     const svg =
       qrContainerRef.current.querySelector(
         "svg"
       );
-  
+
     if (!svg) {
       return;
     }
-  
+
     const serializer =
       new XMLSerializer();
-  
+
     const source =
       serializer.serializeToString(
         svg
       );
-  
+
     const svgBlob =
       new Blob(
         [source],
@@ -286,48 +294,48 @@ const Dashboard: React.FC<
           type: "image/svg+xml;charset=utf-8",
         }
       );
-  
+
     const svgUrl =
       URL.createObjectURL(
         svgBlob
       );
-  
+
     const image =
       new Image();
-  
+
     image.onload = () => {
       const size = 1024;
-  
+
       const canvas =
         document.createElement(
           "canvas"
         );
-  
+
       canvas.width = size;
       canvas.height = size;
-  
+
       const context =
         canvas.getContext(
           "2d"
         );
-  
+
       if (!context) {
         URL.revokeObjectURL(
           svgUrl
         );
         return;
       }
-  
+
       context.fillStyle =
         "#ffffff";
-  
+
       context.fillRect(
         0,
         0,
         size,
         size
       );
-  
+
       context.drawImage(
         image,
         0,
@@ -335,13 +343,13 @@ const Dashboard: React.FC<
         size,
         size
       );
-  
+
       const safeStudyId =
         qrStudy.study_id.replace(
           /[^a-zA-Z0-9_-]+/g,
           "_"
         );
-  
+
       canvas.toBlob(
         (blob) => {
           if (!blob) {
@@ -350,34 +358,34 @@ const Dashboard: React.FC<
             );
             return;
           }
-  
+
           const pngUrl =
             URL.createObjectURL(
               blob
             );
-  
+
           const anchor =
             document.createElement(
               "a"
             );
-  
+
           anchor.href =
             pngUrl;
-  
+
           anchor.download =
             `${safeStudyId}_qr.png`;
-  
+
           document.body.appendChild(
             anchor
           );
-  
+
           anchor.click();
           anchor.remove();
-  
+
           URL.revokeObjectURL(
             pngUrl
           );
-  
+
           URL.revokeObjectURL(
             svgUrl
           );
@@ -385,13 +393,13 @@ const Dashboard: React.FC<
         "image/png"
       );
     };
-  
+
     image.onerror = () => {
       URL.revokeObjectURL(
         svgUrl
       );
     };
-  
+
     image.src = svgUrl;
   }
 
@@ -443,28 +451,31 @@ const Dashboard: React.FC<
               styles.subtitle
             }
           >
-            Here are your studies
-            and collected data.
+            {isAdmin
+              ? "Manage your studies and explore collected data."
+              : "Access your assigned studies and collected data."}
           </p>
         </div>
 
-        <Link
-          href="/retrieve-study"
-          className={
-            styles.addStudyButton
-          }
-        >
-          <span
+        {isAdmin && (
+          <Link
+            href="/retrieve-study"
             className={
-              styles.addSymbol
+              styles.addStudyButton
             }
-            aria-hidden="true"
           >
-            +
-          </span>
+            <span
+              className={
+                styles.addSymbol
+              }
+              aria-hidden="true"
+            >
+              +
+            </span>
 
-          Add study
-        </Link>
+            Add study
+          </Link>
+        )}
       </header>
 
       <section
@@ -491,8 +502,9 @@ const Dashboard: React.FC<
                 styles.sectionDescription
               }
             >
-              Studies associated
-              with your account
+              {isAdmin
+                ? "Studies associated with your account"
+                : "Studies assigned to your account"}
             </p>
           </div>
 
@@ -650,21 +662,23 @@ const Dashboard: React.FC<
                       </span>
                     </button>
 
-                    <button
-                      type="button"
-                      className={
-                        styles.deleteButton
-                      }
-                      onClick={() =>
-                        void handleDeleteStudy(
-                          study.study_id
-                        )
-                      }
-                      aria-label={`Remove ${study.study_name}`}
-                      title="Remove study"
-                    >
-                      ×
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        className={
+                          styles.deleteButton
+                        }
+                        onClick={() =>
+                          void handleDeleteStudy(
+                            study.study_id
+                          )
+                        }
+                        aria-label={`Remove ${study.study_name}`}
+                        title="Remove study"
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
                 </div>
               )
@@ -689,7 +703,9 @@ const Dashboard: React.FC<
                   styles.emptyTitle
                 }
               >
-                No studies yet
+                {isAdmin
+                  ? "No studies yet"
+                  : "No studies assigned"}
               </p>
 
               <p
@@ -697,9 +713,9 @@ const Dashboard: React.FC<
                   styles.emptyDescription
                 }
               >
-                Add a study to
-                begin exploring
-                collected data.
+                {isAdmin
+                  ? "Add a study to begin exploring collected data."
+                  : "You do not currently have access to any studies."}
               </p>
             </div>
           </div>

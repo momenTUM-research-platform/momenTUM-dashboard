@@ -1,16 +1,38 @@
-import "./globals.css"; 
-import "./globals.css"; 
+import "./globals.css";
+
+import type {
+  Metadata,
+} from "next";
+
 import Header from "./components/Header/Header";
+import Footer from "./components/Footer/Footer";
 import { AuthProvider } from "./context/AuthContext";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export const metadata: Metadata = {
+  title: "momenTUM Research Dashboard",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    // data-lt-installed="true" --> hydration error caused by Chrome extension, adding this line to <html> is a workaround. 
-    <html lang="en" data-lt-installed="true"> 
+    <html
+      lang="en"
+      data-lt-installed="true"
+    >
       <body>
         <AuthProvider>
-          <Header />
-          {children}
+          <div className="appShell">
+            <Header />
+
+            <div className="appContent">
+              {children}
+            </div>
+
+            <Footer />
+          </div>
         </AuthProvider>
       </body>
     </html>

@@ -30,7 +30,13 @@ import {
   updateCalendarNote,
 } from "@/app/lib/calendarNotes";
 
-import { LabeledSurveyResponseOut } from "@/app/types/schemas";
+import {
+  StudyQuestion,
+} from "@/app/lib/responses";
+
+import {
+  LabeledSurveyResponseOut,
+} from "@/app/types/schemas";
 
 import EventDetail, {
   ExtendedEventProps,
@@ -60,6 +66,8 @@ type Props = {
 
   rows: LabeledSurveyResponseOut[];
 
+  questions?: StudyQuestion[];
+
   mapping?: Mapping;
 
   mappingName?: string;
@@ -74,8 +82,12 @@ type Props = {
 };
 
 type AggregatedAnswer = {
+  questionId: string;
+
   answers: unknown[];
+
   responseTimes: string[];
+
   alertTimes: Array<
     string | null
   >;
@@ -382,6 +394,9 @@ function bucketToExtended(
     bucket.aggregated,
   )) {
     details[question] = {
+      questionId:
+        aggregate.questionId,
+
       answers:
         aggregate.answers,
 
@@ -420,6 +435,9 @@ function bucketToExtended(
       bucket.mapped_label ??
       bucket.user_id,
 
+    moduleId:
+      bucket.module_id,
+
     moduleName:
       bucket.module_name,
 
@@ -427,7 +445,8 @@ function bucketToExtended(
 
     details,
 
-    type: "structured",
+    type:
+      "structured",
   };
 }
 
@@ -439,8 +458,11 @@ function formatTime(
   ).toLocaleTimeString(
     [],
     {
-      hour: "2-digit",
-      minute: "2-digit",
+      hour:
+        "2-digit",
+
+      minute:
+        "2-digit",
     },
   );
 }
@@ -517,9 +539,14 @@ function formatRangeLabel(
     new Intl.DateTimeFormat(
       undefined,
       {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
+        month:
+          "short",
+
+        day:
+          "numeric",
+
+        year:
+          "numeric",
       },
     );
 
@@ -533,6 +560,7 @@ function formatRangeLabel(
 export default function CalendarViewV2({
   studyId,
   rows,
+  questions = [],
   mapping,
   mappingName = "Participant ID",
   loading = false,
@@ -651,15 +679,23 @@ export default function CalendarViewV2({
       const userIds =
         new Set<string>();
 
-      for (const row of rows) {
+      for (
+        const row of rows
+      ) {
         userIds.add(
           row.user_id,
         );
       }
 
-      if (mapping) {
-        for (const userId of
-          Object.keys(mapping)) {
+      if (
+        mapping
+      ) {
+        for (
+          const userId of
+          Object.keys(
+            mapping,
+          )
+        ) {
           userIds.add(
             userId,
           );
@@ -707,8 +743,10 @@ export default function CalendarViewV2({
           string
         >();
 
-      for (const participant of
-        participants) {
+      for (
+        const participant of
+        participants
+      ) {
         labels.set(
           participant.userId,
           mapping?.[
@@ -732,7 +770,9 @@ export default function CalendarViewV2({
           Bucket
         >();
 
-      for (const row of rows) {
+      for (
+        const row of rows
+      ) {
         const date =
           localDateKey(
             row.response_time,
@@ -742,17 +782,24 @@ export default function CalendarViewV2({
           row.user_id,
           row.module_id,
           date,
-        ].join("|");
+        ].join(
+          "|",
+        );
 
         const mappedLabel =
           mapping?.[
             row.user_id
-          ] ?? null;
+          ] ??
+          null;
 
         let bucket =
-          result.get(key);
+          result.get(
+            key,
+          );
 
-        if (!bucket) {
+        if (
+          !bucket
+        ) {
           bucket = {
             user_id:
               row.user_id,
@@ -768,7 +815,8 @@ export default function CalendarViewV2({
 
             date,
 
-            aggregated: {},
+            aggregated:
+              {},
 
             response_times:
               [],
@@ -811,8 +859,10 @@ export default function CalendarViewV2({
           alertTime,
         );
 
-        for (const answer of
-          row.answers) {
+        for (
+          const answer of
+          row.answers
+        ) {
           const question =
             answer.question_text ??
             answer.question_id;
@@ -825,7 +875,11 @@ export default function CalendarViewV2({
             bucket.aggregated[
               question
             ] = {
-              answers: [],
+              questionId:
+                answer.question_id,
+
+              answers:
+                [],
 
               responseTimes:
                 [],
@@ -867,13 +921,17 @@ export default function CalendarViewV2({
     useMemo(
       () =>
         buckets.flatMap(
-          (bucket) => {
+          (
+            bucket,
+          ) => {
             const timeBounds =
               getResponseTimeBounds(
                 bucket.response_times,
               );
 
-            if (!timeBounds) {
+            if (
+              !timeBounds
+            ) {
               return [];
             }
 
@@ -898,11 +956,12 @@ export default function CalendarViewV2({
 
             return [
               {
-                id: `response:${[
-                  bucket.user_id,
-                  bucket.module_id,
-                  bucket.date,
-                ].join("|")}`,
+                id:
+                  `response:${[
+                    bucket.user_id,
+                    bucket.module_id,
+                    bucket.date,
+                  ].join("|")}`,
 
                 title:
                   bucket.module_name,
@@ -913,7 +972,8 @@ export default function CalendarViewV2({
                 end:
                   timeBounds.end,
 
-                allDay: false,
+                allDay:
+                  false,
 
                 backgroundColor:
                   participantColor.background,
@@ -945,14 +1005,18 @@ export default function CalendarViewV2({
             ];
           },
         ),
-      [buckets],
+      [
+        buckets,
+      ],
     );
 
   const noteEvents =
     useMemo(
       () =>
         notes.map(
-          (note) => {
+          (
+            note,
+          ) => {
             const participant =
               note.user_id
                 ? participantLabelById.get(
@@ -971,7 +1035,8 @@ export default function CalendarViewV2({
               start:
                 note.date,
 
-              allDay: true,
+              allDay:
+                true,
 
               backgroundColor:
                 "var(--warning-subtle)",
@@ -1014,9 +1079,12 @@ export default function CalendarViewV2({
   async function loadNotes(
     range:
       | NoteRange
-      | null = noteRange,
+      | null =
+      noteRange,
   ) {
-    if (!range) {
+    if (
+      !range
+    ) {
       return;
     }
 
@@ -1085,7 +1153,9 @@ export default function CalendarViewV2({
   }
 
   useEffect(() => {
-    if (!noteRange) {
+    if (
+      !noteRange
+    ) {
       return;
     }
 
@@ -1115,7 +1185,9 @@ export default function CalendarViewV2({
           | undefined =
           calendarRef.current?.getApi();
 
-        if (!api) {
+        if (
+          !api
+        ) {
           return false;
         }
 
@@ -1129,7 +1201,9 @@ export default function CalendarViewV2({
         return true;
       };
 
-    if (applyDate()) {
+    if (
+      applyDate()
+    ) {
       return;
     }
 
@@ -1214,7 +1288,8 @@ export default function CalendarViewV2({
         .kind;
 
     if (
-      kind === "note"
+      kind ===
+      "note"
     ) {
       const note =
         arg.event
@@ -1253,13 +1328,16 @@ export default function CalendarViewV2({
   };
 
   const saveNewNote =
-    async (input: {
-      userId:
-        | string
-        | null;
+    async (
+      input: {
+        userId:
+          | string
+          | null;
 
-      text: string;
-    }) => {
+        text:
+          string;
+      },
+    ) => {
       if (
         !selectedDate
       ) {
@@ -1291,7 +1369,9 @@ export default function CalendarViewV2({
           );
 
         setNotes(
-          (previous) => [
+          (
+            previous,
+          ) => [
             ...previous,
             created,
           ],
@@ -1316,7 +1396,8 @@ export default function CalendarViewV2({
 
   const saveExistingNote =
     async (
-      text: string,
+      text:
+        string,
     ) => {
       if (
         !selectedNote
@@ -1341,9 +1422,13 @@ export default function CalendarViewV2({
           );
 
         setNotes(
-          (previous) =>
+          (
+            previous,
+          ) =>
             previous.map(
-              (note) =>
+              (
+                note,
+              ) =>
                 note.id ===
                 updated.id
                   ? updated
@@ -1391,9 +1476,13 @@ export default function CalendarViewV2({
         );
 
         setNotes(
-          (previous) =>
+          (
+            previous,
+          ) =>
             previous.filter(
-              (note) =>
+              (
+                note,
+              ) =>
                 note.id !==
                 selectedNote.id,
             ),
@@ -1429,7 +1518,8 @@ export default function CalendarViewV2({
         .kind;
 
     if (
-      kind === "note"
+      kind ===
+      "note"
     ) {
       const {
         note,
@@ -1437,7 +1527,8 @@ export default function CalendarViewV2({
       } =
         arg.event
           .extendedProps as {
-          note: CalendarNote;
+          note:
+            CalendarNote;
 
           participant:
             | string
@@ -1478,7 +1569,9 @@ export default function CalendarViewV2({
               styles.notePreview
             }
           >
-            {note.text}
+            {
+              note.text
+            }
           </div>
         </div>
       );
@@ -1492,13 +1585,17 @@ export default function CalendarViewV2({
     } =
       arg.event
         .extendedProps as {
-        participant: string;
+        participant:
+          string;
 
-        submissionCount: number;
+        submissionCount:
+          number;
 
-        earlierPromptCount: number;
+        earlierPromptCount:
+          number;
 
-        timeRange: string;
+        timeRange:
+          string;
       };
 
     return (
@@ -1515,7 +1612,9 @@ export default function CalendarViewV2({
             arg.event.title
           }
         >
-          {arg.event.title}
+          {
+            arg.event.title
+          }
         </div>
 
         <div
@@ -1526,7 +1625,9 @@ export default function CalendarViewV2({
             participant
           }
         >
-          {participant}
+          {
+            participant
+          }
         </div>
 
         <div
@@ -1535,7 +1636,9 @@ export default function CalendarViewV2({
           }
         >
           <span>
-            {submissionCount}{" "}
+            {
+              submissionCount
+            }{" "}
             {submissionCount ===
             1
               ? "response"
@@ -1554,7 +1657,9 @@ export default function CalendarViewV2({
               </span>
 
               <span>
-                {timeRange}
+                {
+                  timeRange
+                }
               </span>
             </>
           )}
@@ -1567,7 +1672,9 @@ export default function CalendarViewV2({
               styles.eventScheduleMeta
             }
           >
-            {earlierPromptCount}{" "}
+            {
+              earlierPromptCount
+            }{" "}
             {earlierPromptCount ===
             1
               ? "earlier prompt"
@@ -1628,7 +1735,9 @@ export default function CalendarViewV2({
               styles.rangeLabel
             }
           >
-            {rangeLabel}
+            {
+              rangeLabel
+            }
           </span>
         )}
       </div>
@@ -1645,7 +1754,9 @@ export default function CalendarViewV2({
           </span>
         ) : (
           <span>
-            {rows.length}{" "}
+            {
+              rows.length
+            }{" "}
             {rows.length ===
             1
               ? "response record"
@@ -1669,7 +1780,9 @@ export default function CalendarViewV2({
           </span>
         ) : (
           <span>
-            {notes.length}{" "}
+            {
+              notes.length
+            }{" "}
             {notes.length ===
             1
               ? "note"
@@ -1687,7 +1800,9 @@ export default function CalendarViewV2({
             }
             role="alert"
           >
-            {noteError}
+            {
+              noteError
+            }
           </div>
         )}
 
@@ -1777,7 +1892,9 @@ export default function CalendarViewV2({
             Participant labels
             use{" "}
             <strong>
-              {mappingName}
+              {
+                mappingName
+              }
             </strong>{" "}
             where available,
             with the internal
@@ -1797,6 +1914,9 @@ export default function CalendarViewV2({
         }
         eventData={
           detailData
+        }
+        questions={
+          questions
         }
       />
 

@@ -3168,15 +3168,19 @@ export default function StudyResultsViewV2({
         {activeView ===
         "calendar" ? (
           <CalendarViewV2
-            studyId={
-              studyId
-            }
-            rows={
-              rows ?? []
-            }
-            loading={
-              loading
-            }
+          studyId={
+            studyId
+          }
+          rows={
+            rows ?? []
+          }
+          questions={
+            questions ??
+            []
+          }
+          loading={
+            loading
+          }
             initialDate={
               calendarRange
                 ?.focusDate ??
@@ -3350,6 +3354,10 @@ export default function StudyResultsViewV2({
                 rows={
                   rows
                 }
+                questions={
+                  questions ??
+                  []
+                }
                 mapping={
                   userMap ??
                   undefined
@@ -3368,6 +3376,10 @@ export default function StudyResultsViewV2({
                 }
                 rows={
                   rows
+                }
+                questions={
+                  questions ??
+                  []
                 }
                 userIds={
                   hasImpossibleUserFilter
