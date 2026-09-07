@@ -9,12 +9,14 @@ export type TrackingEvent = {
     | "module_visible"
     | "module_opened"
     | "module_submitted"
-    | "unenrolled";
+    | "unenrolled"
+    | "study_progress_recovered";
 
   user_id: string;
   study_id: string;
   timestamp: string;
-  timezone: string;
+
+  timezone?: string | null;
 
   task_id?: string | null;
   module_id?: string | null;
@@ -60,6 +62,7 @@ export type TrackingEvent = {
       studyId: string;
       userId: string;
       eventType?: TrackingEvent["event_type"];
+      includeDiagnostics?: boolean;
       limit?: number;
       token?: string;
     },
@@ -73,6 +76,13 @@ export type TrackingEvent = {
       query.set(
         "event_type",
         params.eventType,
+      );
+    }
+  
+    if (params.includeDiagnostics) {
+      query.set(
+        "include_diagnostics",
+        "true",
       );
     }
   

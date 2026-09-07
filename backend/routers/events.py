@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pymongo import ASCENDING, MongoClient
 
 from auth import require_study_access
@@ -31,6 +31,22 @@ db = client[MONGO_DB]
 events_col = db["events"]
 
 
+RESEARCHER_EVENT_TYPES = {
+    "enrolled",
+    "notification_tapped",
+    "module_visible",
+    "module_opened",
+    "module_submitted",
+    "unenrolled",
+    "study_progress_recovered",
+}
+
+DIAGNOSTIC_EVENT_TYPES = {
+    "notification_scheduled",
+    "notification_delivered",
+}
+
+
 @router.get(
     "/participant",
     response_model=ParticipantEventsOut,
@@ -39,16 +55,42 @@ def participant_events(
     study_id: str = Query(...),
     user_id: str = Query(...),
     event_type: Optional[str] = Query(None),
+    include_diagnostics: bool = Query(False),
     limit: int = Query(500, ge=1, le=2000),
-    _user: User = Depends(require_study_access),
+    current_user: User = Depends(require_study_access),
 ):
+    is_admin = current_user.role == "admin"
+
+    if include_diagnostics and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Diagnostic events are available to administrators only.",
+        )
+
+    allowed_event_types = set(RESEARCHER_EVENT_TYPES)
+
+    if include_diagnostics:
+        allowed_event_types.update(
+            DIAGNOSTIC_EVENT_TYPES
+        )
+
     query = {
         "study_id": study_id,
         "user_id": user_id,
     }
 
     if event_type:
+        if event_type not in allowed_event_types:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This event type is not available.",
+            )
+
         query["event_type"] = event_type
+    else:
+        query["event_type"] = {
+            "$in": list(allowed_event_types)
+        }
 
     cursor = (
         events_col.find(query)
@@ -64,8 +106,6 @@ def participant_events(
 
         timestamp = doc.get("timestamp")
 
-        # MongoDB stores dates as UTC, but PyMongo may return
-        # them as timezone-naive datetime objects.
         if (
             isinstance(timestamp, datetime)
             and timestamp.tzinfo is None

@@ -1,684 +1,3488 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import {
-  fetchLabeledResponses,
-  fetchFacets,
-  fetchStudyQuestions,
-  fetchUserMapping,
-  Facets,
-  StudyQuestion,
-} from "@/app/lib/responses";
-import { LabeledSurveyResponseOut } from "@/app/types/schemas";
-import TableViewV2 from "@/app/components/TableViewV2/TableViewV2";
-import CalendarViewV2 from "@/app/components/CalendarViewV2/CalendarViewV2";
-import SleepVizPanel from "@/app/components/SleepViz/SleepVizPanel";
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import AdherencePanel from "../AdherencePanel/AdherencePanel";
 import EventTimeline from "../EventTimeline/EventTimeline";
+
+import CalendarViewV2, {
+  CalendarVisibleRange,
+} from "@/app/components/CalendarViewV2/CalendarViewV2";
+
+import SleepVizPanel from "@/app/components/SleepViz/SleepVizPanel";
+import TableViewV2 from "@/app/components/TableViewV2/TableViewV2";
+
+import {
+  downloadResponsesCsv,
+  Facets,
+  fetchFacets,
+  fetchLabeledResponses,
+  fetchStudyQuestions,
+  fetchUserMapping,
+  StudyQuestion,
+} from "@/app/lib/responses";
+
+import {
+  LabeledSurveyResponseOut,
+} from "@/app/types/schemas";
+
 import styles from "./StudyResultsViewV2.module.css";
 
-type Props = { studyId: string };
+type Props = {
+  studyId: string;
+};
 
-export default function StudyResultsViewV2({ studyId }: Props) {
-  // main data
-  const [rows, setRows] = useState<LabeledSurveyResponseOut[] | null>(null);
-  const [facets, setFacets] = useState<Facets | null>(null);
-  const [questions, setQuestions] = useState<StudyQuestion[] | null>(null);
+type ActiveView =
+  | "table"
+  | "calendar"
+  | "visualize"
+  | "adherence"
+  | "events";
 
-  // ui state
-  const [loading, setLoading] = useState(false);
-  const [facetsLoading, setFacetsLoading] = useState(false);
-  const [questionsLoading, setQuestionsLoading] = useState(false);
-  const [mappingLoading, setMappingLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+type ExportScope =
+  | "current"
+  | "all";
 
-  // basic filters
-  const [userIds, setUserIds] = useState<string[]>([]);
-  const [moduleIds, setModuleIds] = useState<string[]>([]);
-  const [from, setFrom] = useState<string>("");
-  const [to, setTo] = useState<string>("");
+const TABLE_PAGE_SIZE = 100;
+const EVENTS_ROW_LIMIT = 5000;
 
-  // extra filter: by mapped identifier (e.g. Participant ID)
-  const [mappedIds, setMappedIds] = useState<string[]>([]);
+function ViewIcon({
+  view,
+}: {
+  view: ActiveView;
+}) {
+  const commonProps = {
+    width: 18,
+    height: 18,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap:
+      "round" as const,
+    strokeLinejoin:
+      "round" as const,
+    "aria-hidden":
+      true as const,
+  };
 
-  // mapping selection (which question is used to derive mapping per user)
-  const [mapKey, setMapKey] = useState<string>("");              // `${module_id}:${question_id}`
-  const [userMap, setUserMap] = useState<Record<string, string> | null>(null); // user_id -> mapped label
+  switch (view) {
+    case "calendar":
+      return (
+        <svg {...commonProps}>
+          <rect
+            x="3"
+            y="5"
+            width="18"
+            height="16"
+            rx="2"
+          />
+          <path d="M16 3v4M8 3v4M3 10h18" />
+        </svg>
+      );
 
-  // view + paging
-  const [activeView, setActiveView] = useState<"table" | "calendar" | "visualize" | "adherence" | "events">("table");
-  const [page, setPage] = useState(1);
-  const TABLE_PAGE_SIZE = 100;
-  const CALENDAR_LIMIT = 5000;
+    case "table":
+      return (
+        <svg {...commonProps}>
+          <rect
+            x="3"
+            y="4"
+            width="18"
+            height="16"
+            rx="1"
+          />
+          <path d="M3 9h18M8 4v16" />
+        </svg>
+      );
 
-  const distinctUsers = useMemo(() => facets?.users ?? [], [facets]);
-  const distinctModules = useMemo(() => facets?.modules ?? [], [facets]);
+    case "events":
+      return (
+        <svg {...commonProps}>
+          <path d="M7 5h14M7 12h14M7 19h14" />
 
-  const selectedQuestion: StudyQuestion | null = useMemo(() => {
-    if (!questions || !mapKey) return null;
-    const [mid, qid] = mapKey.split(":");
-    return questions.find((q) => q.module_id === mid && q.question_id === qid) ?? null;
-  }, [questions, mapKey]);
+          <circle
+            cx="3"
+            cy="5"
+            r="1"
+            fill="currentColor"
+            stroke="none"
+          />
 
-  // all distinct mapped values (e.g. Participant IDs) from userMap
-  const distinctMappedIds = useMemo(() => {
-    if (!userMap) return [];
-    const vals = Object.values(userMap).filter((v) => v && v.trim() !== "");
-    return Array.from(new Set(vals)).sort();
-  }, [userMap]);
+          <circle
+            cx="3"
+            cy="12"
+            r="1"
+            fill="currentColor"
+            stroke="none"
+          />
 
-  // effective set of internal user IDs sent to the backend, combining:
-  // - direct userIds filter
-  // - mappedIds filter (resolved via userMap)
-  const effectiveUserIds = useMemo(() => {
-    if (!userMap && mappedIds.length) {
-      // mapping filter selected but mapping not loaded; safest default is no results
-      return [] as string[];
+          <circle
+            cx="3"
+            cy="19"
+            r="1"
+            fill="currentColor"
+            stroke="none"
+          />
+        </svg>
+      );
+
+    case "adherence":
+      return (
+        <svg {...commonProps}>
+          <circle
+            cx="12"
+            cy="12"
+            r="9"
+          />
+          <path d="m8 12 2.5 2.5L16 9" />
+        </svg>
+      );
+
+    case "visualize":
+      return (
+        <svg {...commonProps}>
+          <path d="M4 19V10M10 19V5M16 19v-7M22 19H2" />
+        </svg>
+      );
+  }
+}
+
+function questionKey(
+  question: StudyQuestion,
+): string {
+  return `${question.module_id}:${question.question_id}`;
+}
+
+function looksLikeIdentifierQuestion(
+  question: StudyQuestion,
+): boolean {
+  const searchableText = [
+    question.question_text,
+    question.question_id,
+    question.module_name,
+    question.module_id,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const idWord =
+    /\b(id|ids)\b/;
+
+  const commonIdentifier =
+    /(participant|study|subject|user|app|record)\s*id\b/;
+
+  return (
+    commonIdentifier.test(
+      searchableText,
+    ) ||
+    idWord.test(
+      searchableText,
+    ) ||
+    searchableText.includes(
+      "_id",
+    )
+  );
+}
+
+function parseDateBoundary(
+  value?: string | null,
+): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp =
+    new Date(value).getTime();
+
+  return Number.isFinite(
+    timestamp,
+  )
+    ? timestamp
+    : null;
+}
+
+function laterBoundary(
+  first?: string,
+  second?: string,
+): string | undefined {
+  const firstTime =
+    parseDateBoundary(
+      first,
+    );
+
+  const secondTime =
+    parseDateBoundary(
+      second,
+    );
+
+  if (
+    firstTime === null &&
+    secondTime === null
+  ) {
+    return undefined;
+  }
+
+  if (firstTime === null) {
+    return second;
+  }
+
+  if (secondTime === null) {
+    return first;
+  }
+
+  return new Date(
+    Math.max(
+      firstTime,
+      secondTime,
+    ),
+  ).toISOString();
+}
+
+function earlierBoundary(
+  first?: string,
+  second?: string,
+): string | undefined {
+  const firstTime =
+    parseDateBoundary(
+      first,
+    );
+
+  const secondTime =
+    parseDateBoundary(
+      second,
+    );
+
+  if (
+    firstTime === null &&
+    secondTime === null
+  ) {
+    return undefined;
+  }
+
+  if (firstTime === null) {
+    return second;
+  }
+
+  if (secondTime === null) {
+    return first;
+  }
+
+  return new Date(
+    Math.min(
+      firstTime,
+      secondTime,
+    ),
+  ).toISOString();
+}
+
+function isInvalidRange(
+  rangeFrom?: string,
+  rangeTo?: string,
+): boolean {
+  const fromTime =
+    parseDateBoundary(
+      rangeFrom,
+    );
+
+  const toTime =
+    parseDateBoundary(
+      rangeTo,
+    );
+
+  return (
+    fromTime !== null &&
+    toTime !== null &&
+    fromTime > toTime
+  );
+}
+
+function formatCollapsedDate(
+  value: string,
+): string {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    undefined,
+    {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    },
+  ).format(date);
+}
+
+export default function StudyResultsViewV2({
+  studyId,
+}: Props) {
+  const [
+    rows,
+    setRows,
+  ] =
+    useState<
+      LabeledSurveyResponseOut[] | null
+    >(null);
+
+  const [
+    facets,
+    setFacets,
+  ] =
+    useState<Facets | null>(
+      null,
+    );
+
+  const [
+    questions,
+    setQuestions,
+  ] =
+    useState<
+      StudyQuestion[] | null
+    >(null);
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(false);
+
+  const [
+    facetsLoading,
+    setFacetsLoading,
+  ] =
+    useState(false);
+
+  const [
+    questionsLoading,
+    setQuestionsLoading,
+  ] =
+    useState(false);
+
+  const [
+    mappingLoading,
+    setMappingLoading,
+  ] =
+    useState(false);
+
+  const [
+    exporting,
+    setExporting,
+  ] =
+    useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    exportError,
+    setExportError,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    userIds,
+    setUserIds,
+  ] =
+    useState<string[]>([]);
+
+  const [
+    moduleIds,
+    setModuleIds,
+  ] =
+    useState<string[]>([]);
+
+  const [
+    from,
+    setFrom,
+  ] =
+    useState("");
+
+  const [
+    to,
+    setTo,
+  ] =
+    useState("");
+
+  const [
+    mappedIds,
+    setMappedIds,
+  ] =
+    useState<string[]>([]);
+
+  const [
+    mapKey,
+    setMapKey,
+  ] =
+    useState("");
+
+  const [
+    userMap,
+    setUserMap,
+  ] =
+    useState<Record<
+      string,
+      string
+    > | null>(null);
+
+  const [
+    activeView,
+    setActiveView,
+  ] =
+    useState<ActiveView>(
+      "calendar",
+    );
+
+  const [
+    page,
+    setPage,
+  ] =
+    useState(1);
+
+  const [
+    calendarRange,
+    setCalendarRange,
+  ] =
+    useState<CalendarVisibleRange | null>(
+      null,
+    );
+
+  const [
+    calendarInitialDate,
+    setCalendarInitialDate,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    showAdditionalFilters,
+    setShowAdditionalFilters,
+  ] =
+    useState(false);
+
+  const [
+    showExportOptions,
+    setShowExportOptions,
+  ] =
+    useState(false);
+
+  const [
+    exportScope,
+    setExportScope,
+  ] =
+    useState<ExportScope>(
+      "current",
+    );
+
+  const [
+    includeNotes,
+    setIncludeNotes,
+  ] =
+    useState(false);
+
+  const rowsRequestId =
+    useRef(0);
+
+  const facetsRequestId =
+    useRef(0);
+
+  const calendarAnchorRequestId =
+    useRef(0);
+
+  const exportAreaRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    );
+
+  const distinctUsers =
+    useMemo(
+      () =>
+        facets?.users ?? [],
+      [facets],
+    );
+
+  const distinctModules =
+    useMemo(
+      () =>
+        facets?.modules ?? [],
+      [facets],
+    );
+
+  const participantIdQuestions =
+    useMemo(() => {
+      if (!questions) {
+        return [];
+      }
+
+      return questions.filter(
+        (question) =>
+          question.role ===
+          "participant_id",
+      );
+    }, [questions]);
+
+  const hasAutomaticParticipantId =
+    participantIdQuestions.length ===
+    1;
+
+  const hasAmbiguousParticipantIds =
+    participantIdQuestions.length >
+    1;
+
+  const selectedQuestion:
+    | StudyQuestion
+    | null =
+    useMemo(() => {
+      if (
+        !questions ||
+        !mapKey
+      ) {
+        return null;
+      }
+
+      const [
+        moduleId,
+        questionId,
+      ] =
+        mapKey.split(":");
+
+      return (
+        questions.find(
+          (question) =>
+            question.module_id ===
+              moduleId &&
+            question.question_id ===
+              questionId,
+        ) ?? null
+      );
+    }, [
+      questions,
+      mapKey,
+    ]);
+
+  const distinctMappedIds =
+    useMemo(() => {
+      if (!userMap) {
+        return [];
+      }
+
+      const values =
+        Object.values(
+          userMap,
+        ).filter(
+          (value) =>
+            value &&
+            value.trim() !==
+              "",
+        );
+
+      return Array.from(
+        new Set(values),
+      ).sort(
+        (a, b) =>
+          a.localeCompare(b),
+      );
+    }, [userMap]);
+
+  const mappedUserIds =
+    useMemo(() => {
+      if (
+        !userMap ||
+        mappedIds.length ===
+          0
+      ) {
+        return [];
+      }
+
+      return Object.entries(
+        userMap,
+      )
+        .filter(
+          ([
+            ,
+            label,
+          ]) =>
+            mappedIds.includes(
+              label,
+            ),
+        )
+        .map(
+          ([
+            userId,
+          ]) =>
+            userId,
+        );
+    }, [
+      userMap,
+      mappedIds,
+    ]);
+
+  const effectiveUserIds =
+    useMemo(() => {
+      if (
+        mappedIds.length ===
+        0
+      ) {
+        return userIds;
+      }
+
+      if (!userMap) {
+        return [];
+      }
+
+      if (
+        userIds.length ===
+        0
+      ) {
+        return mappedUserIds;
+      }
+
+      const mappedSet =
+        new Set(
+          mappedUserIds,
+        );
+
+      return userIds.filter(
+        (userId) =>
+          mappedSet.has(
+            userId,
+          ),
+      );
+    }, [
+      userIds,
+      mappedIds,
+      mappedUserIds,
+      userMap,
+    ]);
+
+  const hasImpossibleUserFilter =
+    useMemo(() => {
+      if (
+        mappedIds.length >
+          0 &&
+        !userMap
+      ) {
+        return true;
+      }
+
+      if (
+        mappedIds.length >
+          0 &&
+        mappedUserIds.length ===
+          0
+      ) {
+        return true;
+      }
+
+      if (
+        mappedIds.length >
+          0 &&
+        userIds.length >
+          0 &&
+        effectiveUserIds.length ===
+          0
+      ) {
+        return true;
+      }
+
+      return false;
+    }, [
+      mappedIds,
+      mappedUserIds,
+      userIds,
+      effectiveUserIds,
+      userMap,
+    ]);
+
+  const legacyIdentifierQuestions =
+    useMemo(() => {
+      if (!questions) {
+        return [];
+      }
+
+      return questions.filter(
+        looksLikeIdentifierQuestion,
+      );
+    }, [questions]);
+
+  const selectableIdentifierQuestions =
+    useMemo(() => {
+      if (
+        hasAmbiguousParticipantIds
+      ) {
+        return participantIdQuestions;
+      }
+
+      if (
+        participantIdQuestions.length ===
+        0
+      ) {
+        return legacyIdentifierQuestions;
+      }
+
+      return [];
+    }, [
+      hasAmbiguousParticipantIds,
+      participantIdQuestions,
+      legacyIdentifierQuestions,
+    ]);
+
+  const questionsByModule =
+    useMemo(() => {
+      const grouped =
+        new Map<
+          string,
+          {
+            module_id: string;
+            module_name: string;
+            items: StudyQuestion[];
+          }
+        >();
+
+      for (
+        const question
+        of selectableIdentifierQuestions
+      ) {
+        if (
+          !grouped.has(
+            question.module_id,
+          )
+        ) {
+          grouped.set(
+            question.module_id,
+            {
+              module_id:
+                question.module_id,
+
+              module_name:
+                question.module_name,
+
+              items: [],
+            },
+          );
+        }
+
+        grouped
+          .get(
+            question.module_id,
+          )!
+          .items.push(
+            question,
+          );
+      }
+
+      const groups =
+        Array.from(
+          grouped.values(),
+        ).sort(
+          (a, b) =>
+            (
+              a.module_name ||
+              ""
+            ).localeCompare(
+              b.module_name ||
+                "",
+            ),
+        );
+
+      for (
+        const group
+        of groups
+      ) {
+        group.items.sort(
+          (a, b) =>
+            (
+              a.question_text ||
+              ""
+            ).localeCompare(
+              b.question_text ||
+                "",
+            ),
+        );
+      }
+
+      return groups;
+    }, [
+      selectableIdentifierQuestions,
+    ]);
+
+  const mappingLabel =
+    selectedQuestion
+      ?.question_text ||
+    (
+      participantIdQuestions.length >
+      0
+        ? "Participant ID"
+        : "Mapped ID"
+    );
+
+  const activeFilterCount =
+    userIds.length +
+    mappedIds.length +
+    moduleIds.length +
+    (from ? 1 : 0) +
+    (to ? 1 : 0);
+
+  const additionalFilterCount =
+    moduleIds.length +
+    (from ? 1 : 0) +
+    (to ? 1 : 0);
+
+  const hasActiveFilters =
+    activeFilterCount > 0;
+
+  const exportCurrentUnavailable =
+    exportScope ===
+      "current" &&
+    hasImpossibleUserFilter;
+
+  async function loadStandardRows(
+    pageArg = page,
+  ) {
+    const requestId =
+      ++rowsRequestId.current;
+
+    if (
+      hasImpossibleUserFilter
+    ) {
+      setRows([]);
+      setLoading(false);
+      setError(null);
+
+      return;
     }
 
-    let mappedUserIds: string[] = [];
-    if (userMap && mappedIds.length) {
-      mappedUserIds = Object.entries(userMap)
-        .filter(([, label]) => mappedIds.includes(label))
-        .map(([uid]) => uid);
-    }
-
-    // only mappedIds filter
-    if (!userIds.length && mappedUserIds.length) {
-      return mappedUserIds;
-    }
-
-    // only explicit userIds filter
-    if (userIds.length && !mappedUserIds.length) {
-      return userIds;
-    }
-
-    // both: intersect explicit userIds with mapped-based IDs
-    if (userIds.length && mappedUserIds.length) {
-      const mappedSet = new Set(mappedUserIds);
-      return userIds.filter((u) => mappedSet.has(u));
-    }
-
-    // no filtering on user dimension
-    return userIds;
-  }, [userIds, mappedIds, userMap]);
-
-  async function load(pageArg = page) {
     setLoading(true);
     setError(null);
+
     try {
-      const isLargeView = activeView === "calendar" || activeView === "events";
-      const res = await fetchLabeledResponses(studyId, {
-        user_id: effectiveUserIds.length ? effectiveUserIds : undefined,
-        module_id: moduleIds.length ? moduleIds : undefined,
-        from: from || undefined,
-        to: to || undefined,
-        sort: "desc",
-        skip: isLargeView ? 0 : (pageArg - 1) * TABLE_PAGE_SIZE,
-        limit: isLargeView ? CALENDAR_LIMIT : TABLE_PAGE_SIZE,
-      });
-      setRows(res);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load data");
+      const isEventsView =
+        activeView ===
+        "events";
+
+      const response =
+        await fetchLabeledResponses(
+          studyId,
+          {
+            user_id:
+              effectiveUserIds.length >
+              0
+                ? effectiveUserIds
+                : undefined,
+
+            module_id:
+              moduleIds.length >
+              0
+                ? moduleIds
+                : undefined,
+
+            from:
+              from ||
+              undefined,
+
+            to:
+              to ||
+              undefined,
+
+            sort:
+              "desc",
+
+            skip:
+              isEventsView
+                ? 0
+                : (
+                    pageArg -
+                    1
+                  ) *
+                  TABLE_PAGE_SIZE,
+
+            limit:
+              isEventsView
+                ? EVENTS_ROW_LIMIT
+                : TABLE_PAGE_SIZE,
+          },
+        );
+
+      if (
+        requestId !==
+        rowsRequestId.current
+      ) {
+        return;
+      }
+
+      setRows(
+        response,
+      );
+    } catch (
+      caughtError: any
+    ) {
+      if (
+        requestId !==
+        rowsRequestId.current
+      ) {
+        return;
+      }
+
+      setError(
+        caughtError?.message ??
+          "Failed to load data.",
+      );
+
       setRows([]);
     } finally {
+      if (
+        requestId ===
+        rowsRequestId.current
+      ) {
+        setLoading(
+          false,
+        );
+      }
+    }
+  }
+
+  async function loadCalendarRows(
+    range:
+      | CalendarVisibleRange
+      | null =
+      calendarRange,
+  ) {
+    const requestId =
+      ++rowsRequestId.current;
+
+    if (!range) {
+      return;
+    }
+
+    if (
+      hasImpossibleUserFilter
+    ) {
+      setRows([]);
       setLoading(false);
+      setError(null);
+
+      return;
+    }
+
+    const effectiveFrom =
+      laterBoundary(
+        from ||
+          undefined,
+        range.from,
+      );
+
+    const effectiveTo =
+      earlierBoundary(
+        to ||
+          undefined,
+        range.to,
+      );
+
+    if (
+      isInvalidRange(
+        effectiveFrom,
+        effectiveTo,
+      )
+    ) {
+      setRows([]);
+      setLoading(false);
+      setError(null);
+
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response =
+        await fetchLabeledResponses(
+          studyId,
+          {
+            user_id:
+              effectiveUserIds.length >
+              0
+                ? effectiveUserIds
+                : undefined,
+
+            module_id:
+              moduleIds.length >
+              0
+                ? moduleIds
+                : undefined,
+
+            from:
+              effectiveFrom,
+
+            to:
+              effectiveTo,
+
+            sort:
+              "asc",
+
+            skip: 0,
+
+            limit: 50000,
+          },
+        );
+
+      if (
+        requestId !==
+        rowsRequestId.current
+      ) {
+        return;
+      }
+
+      setRows(
+        response,
+      );
+    } catch (
+      caughtError: any
+    ) {
+      if (
+        requestId !==
+        rowsRequestId.current
+      ) {
+        return;
+      }
+
+      setError(
+        caughtError?.message ??
+          "Failed to load calendar data.",
+      );
+
+      setRows([]);
+    } finally {
+      if (
+        requestId ===
+        rowsRequestId.current
+      ) {
+        setLoading(
+          false,
+        );
+      }
     }
   }
 
   async function loadFacets() {
-    setFacetsLoading(true);
+    const requestId =
+      ++facetsRequestId.current;
+
+    setFacetsLoading(
+      true,
+    );
+
     try {
-      const f = await fetchFacets(studyId, {
-        user_id: effectiveUserIds.length ? effectiveUserIds : undefined,
-        module_id: moduleIds.length ? moduleIds : undefined,
-        from: from || undefined,
-        to: to || undefined,
-      });
-      setFacets(f);
+      const response =
+        await fetchFacets(
+          studyId,
+          {
+            user_id:
+              !hasImpossibleUserFilter &&
+              effectiveUserIds.length >
+                0
+                ? effectiveUserIds
+                : undefined,
+
+            module_id:
+              moduleIds.length >
+              0
+                ? moduleIds
+                : undefined,
+
+            from:
+              from ||
+              undefined,
+
+            to:
+              to ||
+              undefined,
+          },
+        );
+
+      if (
+        requestId !==
+        facetsRequestId.current
+      ) {
+        return;
+      }
+
+      setFacets(
+        response,
+      );
+    } catch (
+      caughtError
+    ) {
+      console.error(
+        caughtError,
+      );
     } finally {
-      setFacetsLoading(false);
+      if (
+        requestId ===
+        facetsRequestId.current
+      ) {
+        setFacetsLoading(
+          false,
+        );
+      }
     }
   }
 
   async function loadQuestions() {
-    setQuestionsLoading(true);
+    setQuestionsLoading(
+      true,
+    );
+
     try {
-      const q = await fetchStudyQuestions(studyId);
-      setQuestions(q);
-      // keep existing mapping selection if it still exists in the latest question set
-      setMapKey((prev) => {
-        if (!prev) return "";
-        const [mid, qid] = prev.split(":");
-        return q.some((x) => x.module_id === mid && x.question_id === qid) ? prev : "";
-      });
+      const response =
+        await fetchStudyQuestions(
+          studyId,
+        );
+
+      setQuestions(
+        response,
+      );
+
+      const semanticQuestions =
+        response.filter(
+          (question) =>
+            question.role ===
+            "participant_id",
+        );
+
+      setMapKey(
+        (previous) => {
+          if (
+            semanticQuestions.length ===
+            1
+          ) {
+            return questionKey(
+              semanticQuestions[0],
+            );
+          }
+
+          if (
+            semanticQuestions.length >
+            1
+          ) {
+            const previousStillValid =
+              semanticQuestions.some(
+                (question) =>
+                  questionKey(
+                    question,
+                  ) ===
+                  previous,
+              );
+
+            return previousStillValid
+              ? previous
+              : "";
+          }
+
+          if (!previous) {
+            return "";
+          }
+
+          const [
+            moduleId,
+            questionId,
+          ] =
+            previous.split(
+              ":",
+            );
+
+          return response.some(
+            (question) =>
+              question.module_id ===
+                moduleId &&
+              question.question_id ===
+                questionId,
+          )
+            ? previous
+            : "";
+        },
+      );
     } finally {
-      setQuestionsLoading(false);
+      setQuestionsLoading(
+        false,
+      );
     }
   }
 
   async function loadMapping() {
     if (!mapKey) {
-      setUserMap(null);
-      setMappedIds([]); // reset mapping filter when no mapping is selected
+      setUserMap(
+        null,
+      );
+
+      setMappedIds(
+        [],
+      );
+
       return;
     }
-    const [module_id, question_id] = mapKey.split(":");
-    if (!module_id || !question_id) return;
 
-    setMappingLoading(true);
+    const [
+      moduleId,
+      questionId,
+    ] =
+      mapKey.split(":");
+
+    if (
+      !moduleId ||
+      !questionId
+    ) {
+      return;
+    }
+
+    setMappingLoading(
+      true,
+    );
+
     try {
-      const m = await fetchUserMapping(studyId, { module_id, question_id });
-      setUserMap(m);
-      // keep mappedIds if they are still valid labels; drop anything that disappeared
-      setMappedIds((prev) => {
-        if (!m) return [];
-        const labels = new Set(Object.values(m));
-        return prev.filter((id) => labels.has(id));
-      });
-    } catch (e) {
-      console.error(e);
-      setUserMap(null);
-      setMappedIds([]);
+      const mapping =
+        await fetchUserMapping(
+          studyId,
+          {
+            module_id:
+              moduleId,
+
+            question_id:
+              questionId,
+          },
+        );
+
+      setUserMap(
+        mapping,
+      );
+
+      setMappedIds(
+        (previous) => {
+          const labels =
+            new Set(
+              Object.values(
+                mapping,
+              ),
+            );
+
+          return previous.filter(
+            (id) =>
+              labels.has(
+                id,
+              ),
+          );
+        },
+      );
+    } catch (
+      caughtError
+    ) {
+      console.error(
+        caughtError,
+      );
+
+      setUserMap(
+        null,
+      );
+
+      setMappedIds(
+        [],
+      );
     } finally {
-      setMappingLoading(false);
+      setMappingLoading(
+        false,
+      );
     }
   }
 
-  // reload data when filters or view change
-  useEffect(() => {
-    setPage(1);
-    loadFacets();
-    load(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    studyId,
-    JSON.stringify(effectiveUserIds),
-    JSON.stringify(moduleIds),
-    from,
-    to,
-    activeView,
-  ]);
+  async function loadCalendarAnchor() {
+    const requestId =
+      ++calendarAnchorRequestId.current;
 
-  // fetch questions whenever the study changes
+    if (
+      hasImpossibleUserFilter
+    ) {
+      setCalendarInitialDate(
+        new Date().toISOString(),
+      );
+
+      return;
+    }
+
+    try {
+      const response =
+        await fetchLabeledResponses(
+          studyId,
+          {
+            user_id:
+              effectiveUserIds.length >
+              0
+                ? effectiveUserIds
+                : undefined,
+
+            module_id:
+              moduleIds.length >
+              0
+                ? moduleIds
+                : undefined,
+
+            from:
+              from ||
+              undefined,
+
+            to:
+              to ||
+              undefined,
+
+            sort:
+              "desc",
+
+            skip: 0,
+
+            limit: 1,
+          },
+        );
+
+      if (
+        requestId !==
+        calendarAnchorRequestId.current
+      ) {
+        return;
+      }
+
+      setCalendarInitialDate(
+        response[0]
+          ?.response_time ??
+          new Date().toISOString(),
+      );
+    } catch (
+      caughtError
+    ) {
+      console.error(
+        caughtError,
+      );
+
+      if (
+        requestId ===
+        calendarAnchorRequestId.current
+      ) {
+        setCalendarInitialDate(
+          new Date().toISOString(),
+        );
+      }
+    }
+  }
+
+  async function exportResponses() {
+    if (
+      exportScope ===
+        "current" &&
+      hasImpossibleUserFilter
+    ) {
+      setExportError(
+        "The current participant filters do not match any users.",
+      );
+
+      return;
+    }
+
+    setExporting(
+      true,
+    );
+
+    setExportError(
+      null,
+    );
+
+    try {
+      if (
+        exportScope ===
+        "all"
+      ) {
+        await downloadResponsesCsv(
+          studyId,
+          {
+            sort:
+              "asc",
+
+            include_notes:
+              includeNotes,
+          },
+        );
+      } else {
+        await downloadResponsesCsv(
+          studyId,
+          {
+            user_id:
+              effectiveUserIds.length >
+              0
+                ? effectiveUserIds
+                : undefined,
+
+            module_id:
+              moduleIds.length >
+              0
+                ? moduleIds
+                : undefined,
+
+            from:
+              from ||
+              undefined,
+
+            to:
+              to ||
+              undefined,
+
+            sort:
+              "asc",
+
+            include_notes:
+              includeNotes,
+          },
+        );
+      }
+
+      setShowExportOptions(
+        false,
+      );
+    } catch (
+      caughtError: any
+    ) {
+      setExportError(
+        caughtError?.message ??
+          "Failed to export study data.",
+      );
+    } finally {
+      setExporting(
+        false,
+      );
+    }
+  }
+
   useEffect(() => {
-    loadQuestions();
+    setRows(
+      null,
+    );
+
+    setPage(
+      1,
+    );
+
+    setCalendarRange(
+      null,
+    );
+
+    setCalendarInitialDate(
+      null,
+    );
+
+    setExportError(
+      null,
+    );
+
+    setShowExportOptions(
+      false,
+    );
+
+    setExportScope(
+      "current",
+    );
+
+    setIncludeNotes(
+      false,
+    );
+
+    rowsRequestId.current +=
+      1;
+
+    calendarAnchorRequestId.current +=
+      1;
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studyId]);
 
-  // fetch mapping whenever mapping selection or mode changes
   useEffect(() => {
-    loadMapping();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studyId, mapKey]);
-
-  const toggleUser = (v: string) =>
-    setUserIds((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
-
-  const toggleModule = (v: string) =>
-    setModuleIds((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
-
-  const toggleMappedId = (v: string) =>
-    setMappedIds((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
-
-  const chevronBg =
-    "url(\"data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%236b7280' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")";
-
-  function looksLikeIdentifierQuestion(q: StudyQuestion) {
-    const hay = [
-      q.question_text,
-      q.question_id,
-      q.module_name,
-      q.module_id,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-  
-    // avoid matching random words containing "id" (like "did", "mid", etc.)
-    const idWord = /\b(id|ids)\b/;
-    const common = /(participant|study|subject|user|app|record)\s*id\b/;
-  
-    return common.test(hay) || idWord.test(hay) || hay.includes("_id");
-  }
-
-  // group questions by module for a tidy select
-  const questionsByModule = useMemo(() => {
-    if (!questions) return [];
-    const filtered = questions.filter(looksLikeIdentifierQuestion);
-
-    const map = new Map<string, { module_id: string; module_name: string; items: StudyQuestion[] }>();
-    for (const q of filtered) {
-      if (!map.has(q.module_id)) {
-        map.set(q.module_id, { module_id: q.module_id, module_name: q.module_name, items: [] });
-      }
-      map.get(q.module_id)!.items.push(q);
+    if (
+      !showExportOptions
+    ) {
+      return;
     }
-    const groups = Array.from(map.values()).sort((a, b) =>
-      (a.module_name || "").localeCompare(b.module_name || "")
-    );
-    groups.forEach((g) =>
-      g.items.sort((a, b) => (a.question_text || "").localeCompare(b.question_text || ""))
-    );
-    return groups;
-  }, [questions]);
 
-  const mappingLabel = selectedQuestion?.question_text || "Mapped ID";
+    const handlePointerDown = (
+      event: MouseEvent,
+    ) => {
+      const target =
+        event.target;
+
+      if (
+        !(target instanceof Node)
+      ) {
+        return;
+      }
+
+      if (
+        exportAreaRef.current &&
+        !exportAreaRef.current.contains(
+          target,
+        )
+      ) {
+        setShowExportOptions(
+          false,
+        );
+      }
+    };
+
+    const handleKeyDown = (
+      event: KeyboardEvent,
+    ) => {
+      if (
+        event.key ===
+        "Escape"
+      ) {
+        setShowExportOptions(
+          false,
+        );
+      }
+    };
+
+    document.addEventListener(
+      "mousedown",
+      handlePointerDown,
+    );
+
+    document.addEventListener(
+      "keydown",
+      handleKeyDown,
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handlePointerDown,
+      );
+
+      document.removeEventListener(
+        "keydown",
+        handleKeyDown,
+      );
+    };
+  }, [
+    showExportOptions,
+  ]);
+
+  useEffect(() => {
+    setPage(
+      1,
+    );
+
+    void loadFacets();
+
+    if (
+      activeView ===
+        "table" ||
+      activeView ===
+        "events"
+    ) {
+      void loadStandardRows(
+        1,
+      );
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    studyId,
+    JSON.stringify(
+      effectiveUserIds,
+    ),
+    JSON.stringify(
+      moduleIds,
+    ),
+    from,
+    to,
+    activeView,
+    hasImpossibleUserFilter,
+  ]);
+
+  useEffect(() => {
+    if (
+      activeView !==
+      "calendar"
+    ) {
+      return;
+    }
+
+    if (
+      calendarInitialDate
+    ) {
+      return;
+    }
+
+    void loadCalendarAnchor();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeView,
+    studyId,
+    calendarInitialDate,
+  ]);
+
+  useEffect(() => {
+    if (
+      activeView !==
+        "calendar" ||
+      !calendarRange
+    ) {
+      return;
+    }
+
+    void loadCalendarRows(
+      calendarRange,
+    );
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeView,
+    studyId,
+    calendarRange?.from,
+    calendarRange?.to,
+    JSON.stringify(
+      effectiveUserIds,
+    ),
+    JSON.stringify(
+      moduleIds,
+    ),
+    from,
+    to,
+    hasImpossibleUserFilter,
+  ]);
+
+  useEffect(() => {
+    void loadQuestions();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studyId]);
+
+  useEffect(() => {
+    void loadMapping();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    studyId,
+    mapKey,
+  ]);
+
+  const toggleUser = (
+    userId: string,
+  ) => {
+    setUserIds(
+      (previous) =>
+        previous.includes(
+          userId,
+        )
+          ? previous.filter(
+              (value) =>
+                value !==
+                userId,
+            )
+          : [
+              ...previous,
+              userId,
+            ],
+    );
+  };
+
+  const toggleModule = (
+    moduleId: string,
+  ) => {
+    setModuleIds(
+      (previous) =>
+        previous.includes(
+          moduleId,
+        )
+          ? previous.filter(
+              (value) =>
+                value !==
+                moduleId,
+            )
+          : [
+              ...previous,
+              moduleId,
+            ],
+    );
+  };
+
+  const toggleMappedId = (
+    mappedId: string,
+  ) => {
+    setMappedIds(
+      (previous) =>
+        previous.includes(
+          mappedId,
+        )
+          ? previous.filter(
+              (value) =>
+                value !==
+                mappedId,
+            )
+          : [
+              ...previous,
+              mappedId,
+            ],
+    );
+  };
+
+  const resetFilters =
+    () => {
+      setUserIds([]);
+      setMappedIds([]);
+      setModuleIds([]);
+      setFrom("");
+      setTo("");
+      setExportError(
+        null,
+      );
+    };
+
+  const refreshCurrentView =
+    () => {
+      if (
+        activeView ===
+        "calendar"
+      ) {
+        void loadCalendarRows(
+          calendarRange,
+        );
+
+        return;
+      }
+
+      if (
+        activeView ===
+          "table" ||
+        activeView ===
+          "events"
+      ) {
+        void loadStandardRows(
+          activeView ===
+            "table"
+            ? page
+            : 1,
+        );
+      }
+    };
+
+  const viewOptions: Array<{
+    value: ActiveView;
+    label: string;
+    description: string;
+  }> = [
+    {
+      value:
+        "calendar",
+
+      label:
+        "Calendar",
+
+      description:
+        "Browse responses over time",
+    },
+    {
+      value:
+        "table",
+
+      label:
+        "Table",
+
+      description:
+        "Inspect individual responses",
+    },
+    {
+      value:
+        "events",
+
+      label:
+        "Events",
+
+      description:
+        "Inspect participant activity",
+    },
+    {
+      value:
+        "adherence",
+
+      label:
+        "Adherence",
+
+      description:
+        "Review participation",
+    },
+    {
+      value:
+        "visualize",
+
+      label:
+        "Visualize",
+
+      description:
+        "Study-specific analysis",
+    },
+  ];
+
+  const rendersOwnData =
+    activeView ===
+      "visualize" ||
+    activeView ===
+      "adherence";
 
   return (
-    <div className={styles.root}>
-      {/* Header */}
-      <div className="text-center">
-        <h2 className="text-2xl font-semibold mb-1">Filters</h2>
-        <p className="text-sm text-gray-600">
-          Refine by users, mapped IDs, modules, and time range. Calendar loads a larger batch
-          automatically.
-        </p>
-      </div>
-
-      {/* Toolbar */}
-      <div className={styles.toolbar}>
-        <div className={styles.segment} role="tablist" aria-label="View">
-          <button
-            role="tab"
-            aria-selected={activeView === "table"}
-            onClick={() => setActiveView("table")}
-            className={`${styles.segmentBtn} ${activeView === "table" ? styles.segmentBtnActive : ""}`}
-          >
-            Table
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeView === "calendar"}
-            onClick={() => setActiveView("calendar")}
-            className={`${styles.segmentBtn} ${activeView === "calendar" ? styles.segmentBtnActive : ""}`}
-          >
-            Calendar
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeView === "visualize"}
-            onClick={() => setActiveView("visualize")}
-            className={`${styles.segmentBtn} ${activeView === "visualize" ? styles.segmentBtnActive : ""}`}
-          >
-            Visualize
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeView === "adherence"}
-            onClick={() => setActiveView("adherence")}
-            className={`${styles.segmentBtn} ${activeView === "adherence" ? styles.segmentBtnActive : ""}`}
-          >
-            Adherence
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeView === "events"}
-            onClick={() => setActiveView("events")}
-            className={`${styles.segmentBtn} ${
-              activeView === "events"
-                ? styles.segmentBtnActive
-                : ""
-            }`}
-          >
-            Events
-          </button>
-        </div>
-
-        <button
-          className={styles.btn}
-          onClick={() => load(activeView === "calendar" ? 1 : page)}
-          disabled={loading}
+    <div
+      className={
+        styles.root
+      }
+    >
+      <section
+        className={
+          styles.viewSection
+        }
+      >
+        <div
+          className={
+            styles.viewHeader
+          }
         >
-          Apply / Refresh
-        </button>
-        <button
-          className={styles.btn}
-          onClick={() => {
-            setUserIds([]);
-            setMappedIds([]);
-            setModuleIds([]);
-            setFrom("");
-            setTo("");
-          }}
-          disabled={loading || facetsLoading}
-        >
-          Reset
-        </button>
+          <div>
+            <p
+              className={
+                styles.eyebrow
+              }
+            >
+              Study data
+            </p>
 
-        <div className={styles.count}>
-          {rows ? `Loaded ${rows.length} record${rows.length !== 1 ? "s" : ""}` : ""}
-        </div>
-      </div>
+            <h2
+              className={
+                styles.heading
+              }
+            >
+              Explore results
+            </h2>
 
-      {/* Mapping + Filters */}
-      <div className={styles.filters}>
-        {/* Mapping selector */}
-        <div className="field">
-          <label>Mapping (pick a question to label users, e.g. “Participant ID”)</label>
-          <select
-            className={styles.input}
-            value={mapKey}
-            onChange={(e) => setMapKey(e.target.value)}
-            disabled={questionsLoading || !questionsByModule.length}
-            style={{
-              appearance: "none",
-              backgroundImage: chevronBg,
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right .75rem center",
-              backgroundSize: "1rem",
-            }}
+            <p
+              className={
+                styles.headingDescription
+              }
+            >
+              Inspect responses,
+              participation, and
+              study activity.
+            </p>
+          </div>
+
+          <div
+            className={
+              styles.resultStatus
+            }
           >
-            <option value="">— None —</option>
-            {questionsByModule.map((grp) => (
-              <optgroup key={grp.module_id} label={grp.module_name || grp.module_id}>
-                {grp.items.map((q) => {
-                  const val = `${q.module_id}:${q.question_id}`;
-                  return (
-                    <option key={val} value={val}>
-                      {q.question_text}
-                    </option>
-                  );
-                })}
-              </optgroup>
-            ))}
-          </select>
-
-          <div className="mt-2 flex items-center gap-2">
-            <span className={styles.help}>
-              {mappingLoading
-                ? "Loading mapping…"
-                : selectedQuestion
-                ? `Using: ${selectedQuestion.question_text}`
-                : "No mapping selected"}
-            </span>
+            {loading ? (
+              <span>
+                Loading…
+              </span>
+            ) : rows &&
+              !rendersOwnData ? (
+              <span>
+                {
+                  rows.length
+                }{" "}
+                {rows.length ===
+                1
+                  ? "record"
+                  : "records"}{" "}
+                loaded
+              </span>
+            ) : null}
           </div>
         </div>
 
-        {/* Mapped IDs (e.g. Participant IDs) */}
-        {userMap && distinctMappedIds.length > 0 && (
-          <div className="field">
-            <label>{mappingLabel}</label>
+        <div
+          className={
+            styles.viewTabs
+          }
+          role="tablist"
+          aria-label="Study data view"
+        >
+          {viewOptions.map(
+            (view) => (
+              <button
+                key={
+                  view.value
+                }
+                type="button"
+                role="tab"
+                aria-selected={
+                  activeView ===
+                  view.value
+                }
+                className={`${styles.viewTab} ${
+                  activeView ===
+                  view.value
+                    ? styles.viewTabActive
+                    : ""
+                }`}
+                onClick={() =>
+                  setActiveView(
+                    view.value,
+                  )
+                }
+              >
+                <span
+                  className={
+                    styles.viewTabIcon
+                  }
+                >
+                  <ViewIcon
+                    view={
+                      view.value
+                    }
+                  />
+                </span>
+
+                <span
+                  className={
+                    styles.viewTabCopy
+                  }
+                >
+                  <span
+                    className={
+                      styles.viewTabLabel
+                    }
+                  >
+                    {
+                      view.label
+                    }
+                  </span>
+
+                  <span
+                    className={
+                      styles.viewTabDescription
+                    }
+                  >
+                    {
+                      view.description
+                    }
+                  </span>
+                </span>
+              </button>
+            ),
+          )}
+        </div>
+      </section>
+
+      <section
+        className={
+          styles.filterSection
+        }
+      >
+        <div
+          className={
+            styles.filterHeader
+          }
+        >
+          <div>
+            <h3
+              className={
+                styles.sectionTitle
+              }
+            >
+              Filters
+            </h3>
+
+            <p
+              className={
+                styles.sectionDescription
+              }
+            >
+              Select participants
+              and optionally narrow
+              the results by module
+              or time range.
+            </p>
+          </div>
+
+          <div
+            className={
+              styles.filterActions
+            }
+          >
+            {hasActiveFilters && (
+              <span
+                className={
+                  styles.activeFilterCount
+                }
+              >
+                {
+                  activeFilterCount
+                }{" "}
+                active
+              </span>
+            )}
+
+            <div
+              className={
+                styles.exportArea
+              }
+              ref={
+                exportAreaRef
+              }
+            >
+              <button
+                type="button"
+                className={`${styles.secondaryButton} ${styles.exportTrigger}`}
+                onClick={() => {
+                  setExportError(
+                    null,
+                  );
+
+                  setShowExportOptions(
+                    (current) =>
+                      !current,
+                  );
+                }}
+                aria-haspopup="dialog"
+                aria-expanded={
+                  showExportOptions
+                }
+                disabled={
+                  exporting
+                }
+              >
+                <span>
+                  {exporting
+                    ? "Exporting…"
+                    : "Export"}
+                </span>
+
+                <span
+                  className={`${styles.exportChevron} ${
+                    showExportOptions
+                      ? styles.exportChevronOpen
+                      : ""
+                  }`}
+                  aria-hidden="true"
+                >
+                  ›
+                </span>
+              </button>
+
+              {showExportOptions && (
+                <div
+                  className={
+                    styles.exportPopover
+                  }
+                  role="dialog"
+                  aria-label="Export study data"
+                >
+                  <div
+                    className={
+                      styles.exportPopoverHeader
+                    }
+                  >
+                    <strong>
+                      Export study
+                      data
+                    </strong>
+
+                    <span>
+                      Choose which
+                      responses to
+                      download.
+                    </span>
+                  </div>
+
+                  <fieldset
+                    className={
+                      styles.exportFieldset
+                    }
+                  >
+                    <legend
+                      className={
+                        styles.exportLegend
+                      }
+                    >
+                      Scope
+                    </legend>
+
+                    <label
+                      className={
+                        styles.exportChoice
+                      }
+                    >
+                      <input
+                        type="radio"
+                        name="export-scope"
+                        value="current"
+                        checked={
+                          exportScope ===
+                          "current"
+                        }
+                        onChange={() =>
+                          setExportScope(
+                            "current",
+                          )
+                        }
+                      />
+
+                      <span
+                        className={
+                          styles.exportChoiceCopy
+                        }
+                      >
+                        <strong>
+                          Current
+                          filtered
+                          data
+                        </strong>
+
+                        <span>
+                          {hasActiveFilters
+                            ? "Use the participant, module, and date filters currently applied."
+                            : "No filters are currently applied, so this includes all responses."}
+                        </span>
+                      </span>
+                    </label>
+
+                    <label
+                      className={
+                        styles.exportChoice
+                      }
+                    >
+                      <input
+                        type="radio"
+                        name="export-scope"
+                        value="all"
+                        checked={
+                          exportScope ===
+                          "all"
+                        }
+                        onChange={() =>
+                          setExportScope(
+                            "all",
+                          )
+                        }
+                      />
+
+                      <span
+                        className={
+                          styles.exportChoiceCopy
+                        }
+                      >
+                        <strong>
+                          All study
+                          data
+                        </strong>
+
+                        <span>
+                          Ignore the
+                          current
+                          dashboard
+                          filters.
+                        </span>
+                      </span>
+                    </label>
+                  </fieldset>
+
+                  {exportCurrentUnavailable && (
+                    <div
+                      className={
+                        styles.exportWarning
+                      }
+                    >
+                      The current
+                      participant
+                      filters do not
+                      match any
+                      users. Choose
+                      all study data
+                      or adjust the
+                      filters.
+                    </div>
+                  )}
+
+                  <div
+                    className={
+                      styles.exportDivider
+                    }
+                  />
+
+                  <label
+                    className={
+                      styles.exportCheckbox
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        includeNotes
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setIncludeNotes(
+                          event.target
+                            .checked,
+                        )
+                      }
+                    />
+
+                    <span
+                      className={
+                        styles.exportChoiceCopy
+                      }
+                    >
+                      <strong>
+                        Include
+                        calendar
+                        notes
+                      </strong>
+
+                      <span>
+                        Downloads a
+                        ZIP containing
+                        responses.csv
+                        and notes.csv.
+                      </span>
+                    </span>
+                  </label>
+
+                  <div
+                    className={
+                      styles.exportFormatNote
+                    }
+                  >
+                    {includeNotes
+                      ? "Format: ZIP archive"
+                      : "Format: CSV"}
+                  </div>
+
+                  <div
+                    className={
+                      styles.exportFooter
+                    }
+                  >
+                    <button
+                      type="button"
+                      className={
+                        styles.exportCancelButton
+                      }
+                      onClick={() =>
+                        setShowExportOptions(
+                          false,
+                        )
+                      }
+                      disabled={
+                        exporting
+                      }
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      className={
+                        styles.exportDownloadButton
+                      }
+                      onClick={() =>
+                        void exportResponses()
+                      }
+                      disabled={
+                        exporting ||
+                        exportCurrentUnavailable
+                      }
+                    >
+                      {exporting
+                        ? "Preparing…"
+                        : includeNotes
+                          ? "Download ZIP"
+                          : "Download CSV"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className={
+                styles.secondaryButton
+              }
+              onClick={
+                resetFilters
+              }
+              disabled={
+                loading ||
+                facetsLoading ||
+                !hasActiveFilters
+              }
+            >
+              Clear filters
+            </button>
+
+            <button
+              type="button"
+              className={
+                styles.refreshButton
+              }
+              onClick={
+                refreshCurrentView
+              }
+              disabled={
+                loading ||
+                rendersOwnData
+              }
+            >
+              {loading
+                ? "Refreshing…"
+                : "Refresh"}
+            </button>
+          </div>
+        </div>
+
+        {exportError && (
+          <div
+            className={
+              styles.errorState
+            }
+            role="alert"
+          >
+            <strong>
+              Could not export
+              study data
+            </strong>
+
+            <span>
+              {exportError}
+            </span>
+          </div>
+        )}
+
+        <div
+          className={
+            styles.mappingArea
+          }
+        >
+          <div
+            className={
+              styles.mappingIntro
+            }
+          >
+            <span
+              className={
+                styles.mappingLabel
+              }
+            >
+              Participant identifier
+            </span>
+
+            <p
+              className={
+                styles.mappingDescription
+              }
+            >
+              {hasAutomaticParticipantId
+                ? "This study defines its participant identifier in the study schema."
+                : hasAmbiguousParticipantIds
+                  ? "More than one question is marked as the participant identifier. Select the one to use."
+                  : "This study does not define a participant identifier role. You can optionally select a likely identifier question for compatibility with older studies."}
+            </p>
+          </div>
+
+          <div
+            className={
+              styles.mappingControl
+            }
+          >
+            {hasAutomaticParticipantId ? (
+              <>
+                <span
+                  className={
+                    styles.fieldLabel
+                  }
+                >
+                  Participant ID
+                </span>
+
+                <div
+                  className={
+                    styles.fieldStatus
+                  }
+                >
+                  {mappingLoading
+                    ? "Loading participant IDs…"
+                    : selectedQuestion
+                      ? `Automatically using: ${selectedQuestion.question_text}`
+                      : "Participant identifier detected"}
+                </div>
+              </>
+            ) : (
+              <>
+                <label
+                  htmlFor="mapping-question"
+                  className={
+                    styles.fieldLabel
+                  }
+                >
+                  {hasAmbiguousParticipantIds
+                    ? "Participant ID question"
+                    : "Identifier question"}
+                </label>
+
+                <select
+                  id="mapping-question"
+                  className={
+                    styles.input
+                  }
+                  value={
+                    mapKey
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setMapKey(
+                      event.target
+                        .value,
+                    )
+                  }
+                  disabled={
+                    questionsLoading ||
+                    !questionsByModule.length
+                  }
+                >
+                  <option value="">
+                    None
+                  </option>
+
+                  {questionsByModule.map(
+                    (group) => (
+                      <optgroup
+                        key={
+                          group.module_id
+                        }
+                        label={
+                          group.module_name ||
+                          group.module_id
+                        }
+                      >
+                        {group.items.map(
+                          (
+                            question,
+                          ) => {
+                            const value =
+                              questionKey(
+                                question,
+                              );
+
+                            return (
+                              <option
+                                key={
+                                  value
+                                }
+                                value={
+                                  value
+                                }
+                              >
+                                {
+                                  question.question_text
+                                }
+                              </option>
+                            );
+                          },
+                        )}
+                      </optgroup>
+                    ),
+                  )}
+                </select>
+
+                <div
+                  className={
+                    styles.fieldStatus
+                  }
+                >
+                  {mappingLoading
+                    ? "Loading participant IDs…"
+                    : selectedQuestion
+                      ? `Using: ${selectedQuestion.question_text}`
+                      : questionsLoading
+                        ? "Loading available questions…"
+                        : hasAmbiguousParticipantIds
+                          ? "Select which participant ID question to use"
+                          : questionsByModule.length >
+                              0
+                            ? "No identifier selected"
+                            : "No likely identifier questions found"}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div
+          className={
+            styles.filtersGrid
+          }
+        >
+          {userMap &&
+            distinctMappedIds.length >
+              0 && (
+              <div
+                className={
+                  styles.field
+                }
+              >
+                <label
+                  className={
+                    styles.fieldLabel
+                  }
+                  htmlFor="mapped-id-filter"
+                >
+                  {hasAutomaticParticipantId ||
+                  hasAmbiguousParticipantIds
+                    ? "Participant ID"
+                    : mappingLabel}
+                </label>
+
+                <select
+                  id="mapped-id-filter"
+                  className={
+                    styles.input
+                  }
+                  value=""
+                  onChange={(
+                    event,
+                  ) => {
+                    const value =
+                      event.target
+                        .value;
+
+                    if (value) {
+                      toggleMappedId(
+                        value,
+                      );
+                    }
+                  }}
+                >
+                  <option value="">
+                    {mappedIds.length
+                      ? "Add another…"
+                      : "All participants"}
+                  </option>
+
+                  {distinctMappedIds.map(
+                    (id) => (
+                      <option
+                        key={
+                          id
+                        }
+                        value={
+                          id
+                        }
+                      >
+                        {mappedIds.includes(
+                          id,
+                        )
+                          ? "✓ "
+                          : ""}
+                        {id}
+                      </option>
+                    ),
+                  )}
+                </select>
+
+                <div
+                  className={
+                    styles.selectionArea
+                  }
+                >
+                  {mappedIds.length ===
+                  0 ? (
+                    <span
+                      className={
+                        styles.help
+                      }
+                    >
+                      All participants
+                    </span>
+                  ) : (
+                    <>
+                      <div
+                        className={
+                          styles.chipList
+                        }
+                      >
+                        {mappedIds.map(
+                          (id) => (
+                            <span
+                              key={
+                                id
+                              }
+                              className={
+                                styles.chip
+                              }
+                            >
+                              <span>
+                                {
+                                  id
+                                }
+                              </span>
+
+                              <button
+                                type="button"
+                                aria-label={`Remove ${id}`}
+                                onClick={() =>
+                                  toggleMappedId(
+                                    id,
+                                  )
+                                }
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ),
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        className={
+                          styles.clearInlineButton
+                        }
+                        onClick={() =>
+                          setMappedIds(
+                            [],
+                          )
+                        }
+                      >
+                        Clear
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+          <div
+            className={
+              styles.field
+            }
+          >
+            <label
+              className={
+                styles.fieldLabel
+              }
+              htmlFor="user-filter"
+            >
+              Internal user
+            </label>
+
             <select
-              className={styles.input}
+              id="user-filter"
+              className={
+                styles.input
+              }
               value=""
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v) toggleMappedId(v);
-              }}
-              style={{
-                appearance: "none",
-                backgroundImage: chevronBg,
-                backgroundRepeat: "no-repeat",
-                backgroundPosition: "right .75rem center",
-                backgroundSize: "1rem",
+              onChange={(
+                event,
+              ) => {
+                const value =
+                  event.target
+                    .value;
+
+                if (value) {
+                  toggleUser(
+                    value,
+                  );
+                }
               }}
             >
               <option value="">
-                {mappedIds.length ? "Add another…" : "Select…"}
+                {userIds.length
+                  ? "Add another…"
+                  : "All users"}
               </option>
-              {distinctMappedIds.map((id) => (
-                <option key={id} value={id}>
-                  {mappedIds.includes(id) ? "✓ " : ""}
-                  {id}
-                </option>
-              ))}
+
+              {distinctUsers.map(
+                (userId) => (
+                  <option
+                    key={
+                      userId
+                    }
+                    value={
+                      userId
+                    }
+                  >
+                    {userIds.includes(
+                      userId,
+                    )
+                      ? "✓ "
+                      : ""}
+                    {userId}
+                  </option>
+                ),
+              )}
             </select>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {mappedIds.length === 0 ? (
-                <span className={styles.help}>All mapped IDs</span>
+
+            <div
+              className={
+                styles.selectionArea
+              }
+            >
+              {userIds.length ===
+              0 ? (
+                <span
+                  className={
+                    styles.help
+                  }
+                >
+                  No internal-user
+                  filter applied
+                </span>
               ) : (
                 <>
-                  {mappedIds.map((id) => (
-                    <span key={id} className={styles.chip}>
-                      {id}
-                      <button
-                        aria-label={`Remove ${id}`}
-                        onClick={() => toggleMappedId(id)}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                  <button
-                    className="text-xs underline"
-                    onClick={() => setMappedIds([])}
+                  <div
+                    className={
+                      styles.chipList
+                    }
                   >
-                    Clear all
+                    {userIds.map(
+                      (
+                        userId,
+                      ) => (
+                        <span
+                          key={
+                            userId
+                          }
+                          className={
+                            styles.chip
+                          }
+                        >
+                          <span>
+                            {
+                              userId
+                            }
+                          </span>
+
+                          <button
+                            type="button"
+                            aria-label={`Remove ${userId}`}
+                            onClick={() =>
+                              toggleUser(
+                                userId,
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ),
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className={
+                      styles.clearInlineButton
+                    }
+                    onClick={() =>
+                      setUserIds(
+                        [],
+                      )
+                    }
+                  >
+                    Clear
                   </button>
                 </>
               )}
             </div>
+
+            {facetsLoading && (
+              <div
+                className={
+                  styles.fieldStatus
+                }
+              >
+                Updating available
+                users…
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          className={
+            styles.additionalFiltersHeader
+          }
+        >
+          <button
+            type="button"
+            className={
+              styles.additionalFiltersToggle
+            }
+            onClick={() =>
+              setShowAdditionalFilters(
+                (current) =>
+                  !current,
+              )
+            }
+            aria-expanded={
+              showAdditionalFilters
+            }
+          >
+            <span>
+              More filters
+            </span>
+
+            {additionalFilterCount >
+              0 && (
+              <span
+                className={
+                  styles.additionalFilterCount
+                }
+              >
+                {
+                  additionalFilterCount
+                }{" "}
+                active
+              </span>
+            )}
+
+            <span
+              className={`${styles.filterChevron} ${
+                showAdditionalFilters
+                  ? styles.filterChevronOpen
+                  : ""
+              }`}
+              aria-hidden="true"
+            >
+              ›
+            </span>
+          </button>
+
+          {!showAdditionalFilters &&
+            additionalFilterCount >
+              0 && (
+              <div
+                className={
+                  styles.collapsedFilterSummary
+                }
+              >
+                {moduleIds.length >
+                  0 && (
+                  <span>
+                    {moduleIds.length ===
+                    1
+                      ? "1 module"
+                      : `${moduleIds.length} modules`}
+                  </span>
+                )}
+
+                {from && (
+                  <span>
+                    From{" "}
+                    {formatCollapsedDate(
+                      from,
+                    )}
+                  </span>
+                )}
+
+                {to && (
+                  <span>
+                    To{" "}
+                    {formatCollapsedDate(
+                      to,
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
+        </div>
+
+        {showAdditionalFilters && (
+          <div
+            className={
+              styles.additionalFilters
+            }
+          >
+            <div
+              className={
+                styles.field
+              }
+            >
+              <label
+                className={
+                  styles.fieldLabel
+                }
+                htmlFor="module-filter"
+              >
+                Module
+              </label>
+
+              <select
+                id="module-filter"
+                className={
+                  styles.input
+                }
+                value=""
+                onChange={(
+                  event,
+                ) => {
+                  const value =
+                    event.target
+                      .value;
+
+                  if (value) {
+                    toggleModule(
+                      value,
+                    );
+                  }
+                }}
+              >
+                <option value="">
+                  {moduleIds.length
+                    ? "Add another…"
+                    : "All modules"}
+                </option>
+
+                {distinctModules.map(
+                  (module) => (
+                    <option
+                      key={
+                        module.id
+                      }
+                      value={
+                        module.id
+                      }
+                    >
+                      {moduleIds.includes(
+                        module.id,
+                      )
+                        ? "✓ "
+                        : ""}
+
+                      {module.name ||
+                        module.id}
+                    </option>
+                  ),
+                )}
+              </select>
+
+              <div
+                className={
+                  styles.selectionArea
+                }
+              >
+                {moduleIds.length ===
+                0 ? (
+                  <span
+                    className={
+                      styles.help
+                    }
+                  >
+                    All modules
+                  </span>
+                ) : (
+                  <>
+                    <div
+                      className={
+                        styles.chipList
+                      }
+                    >
+                      {moduleIds.map(
+                        (
+                          moduleId,
+                        ) => (
+                          <span
+                            key={
+                              moduleId
+                            }
+                            className={
+                              styles.chip
+                            }
+                          >
+                            <span>
+                              {distinctModules.find(
+                                (
+                                  module,
+                                ) =>
+                                  module.id ===
+                                  moduleId,
+                              )
+                                ?.name ||
+                                moduleId}
+                            </span>
+
+                            <button
+                              type="button"
+                              aria-label={`Remove ${moduleId}`}
+                              onClick={() =>
+                                toggleModule(
+                                  moduleId,
+                                )
+                              }
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ),
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      className={
+                        styles.clearInlineButton
+                      }
+                      onClick={() =>
+                        setModuleIds(
+                          [],
+                        )
+                      }
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div
+              className={
+                styles.dateField
+              }
+            >
+              <label
+                className={
+                  styles.fieldLabel
+                }
+                htmlFor="from-filter"
+              >
+                From
+              </label>
+
+              <input
+                id="from-filter"
+                type="datetime-local"
+                className={
+                  styles.input
+                }
+                value={
+                  from
+                }
+                onChange={(
+                  event,
+                ) =>
+                  setFrom(
+                    event.target
+                      .value,
+                  )
+                }
+              />
+            </div>
+
+            <div
+              className={
+                styles.dateField
+              }
+            >
+              <label
+                className={
+                  styles.fieldLabel
+                }
+                htmlFor="to-filter"
+              >
+                To
+              </label>
+
+              <input
+                id="to-filter"
+                type="datetime-local"
+                className={
+                  styles.input
+                }
+                value={
+                  to
+                }
+                onChange={(
+                  event,
+                ) =>
+                  setTo(
+                    event.target
+                      .value,
+                  )
+                }
+              />
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section
+        className={
+          styles.resultsSection
+        }
+      >
+        {error && (
+          <div
+            className={
+              styles.errorState
+            }
+            role="alert"
+          >
+            <strong>
+              Could not load
+              study data
+            </strong>
+
+            <span>
+              {error}
+            </span>
           </div>
         )}
 
-        {/* Users (internal IDs) */}
-        <div className="field">
-          <label>Users</label>
-          <select
-            className={styles.input}
-            value=""
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v) toggleUser(v);
-            }}
-            style={{
-              appearance: "none",
-              backgroundImage: chevronBg,
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right .75rem center",
-              backgroundSize: "1rem",
-            }}
-          >
-            <option value="">Select user…</option>
-            {distinctUsers.map((u) => (
-              <option key={u} value={u}>
-                {userIds.includes(u) ? "✓ " : ""}
-                {u}
-              </option>
-            ))}
-          </select>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {userIds.length === 0 ? (
-              <span className={styles.help}>All users</span>
-            ) : (
-              <>
-                {userIds.map((u) => (
-                  <span key={u} className={styles.chip}>
-                    {u}
-                    <button aria-label={`Remove ${u}`} onClick={() => toggleUser(u)}>
-                      ×
-                    </button>
-                  </span>
-                ))}
-                <button className="text-xs underline" onClick={() => setUserIds([])}>
-                  Clear all
-                </button>
-              </>
-            )}
-          </div>
-          {facetsLoading && <div className={styles.help}>Updating…</div>}
-        </div>
-
-        {/* Modules */}
-        <div className="field">
-          <label>Modules</label>
-          <select
-            className={styles.input}
-            value=""
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v) toggleModule(v);
-            }}
-            style={{
-              appearance: "none",
-              backgroundImage: chevronBg,
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right .75rem center",
-              backgroundSize: "1rem",
-            }}
-          >
-            <option value="">Select module…</option>
-            {distinctModules.map((m) => (
-              <option key={m.id} value={m.id}>
-                {moduleIds.includes(m.id) ? "✓ " : ""}
-                {m.name || m.id}
-              </option>
-            ))}
-          </select>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {moduleIds.length === 0 ? (
-              <span className={styles.help}>All modules</span>
-            ) : (
-              <>
-                {moduleIds.map((m) => (
-                  <span key={m} className={styles.chip}>
-                    {distinctModules.find((x) => x.id === m)?.name || m}
-                    <button aria-label={`Remove ${m}`} onClick={() => toggleModule(m)}>
-                      ×
-                    </button>
-                  </span>
-                ))}
-                <button className="text-xs underline" onClick={() => setModuleIds([])}>
-                  Clear all
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Dates */}
-        <div className="field">
-          <label>From</label>
-          <input
-            type="datetime-local"
-            className={styles.input}
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
+        {activeView ===
+        "calendar" ? (
+          <CalendarViewV2
+            studyId={
+              studyId
+            }
+            rows={
+              rows ?? []
+            }
+            loading={
+              loading
+            }
+            initialDate={
+              calendarRange
+                ?.focusDate ??
+              calendarInitialDate ??
+              undefined
+            }
+            onRangeChange={(
+              range,
+            ) =>
+              setCalendarRange(
+                range,
+              )
+            }
+            mapping={
+              userMap ??
+              undefined
+            }
+            mappingName={
+              hasAutomaticParticipantId ||
+              hasAmbiguousParticipantIds
+                ? "Participant ID"
+                : mappingLabel
+            }
           />
-        </div>
-
-        <div className="field">
-          <label>To</label>
-          <input
-            type="datetime-local"
-            className={styles.input}
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
+        ) : activeView ===
+          "visualize" ? (
+          <SleepVizPanel
+            studyId={
+              studyId
+            }
+            userIds={
+              hasImpossibleUserFilter
+                ? []
+                : effectiveUserIds.length
+                  ? effectiveUserIds
+                  : undefined
+            }
+            moduleIds={
+              moduleIds.length
+                ? moduleIds
+                : undefined
+            }
+            from={
+              from ||
+              undefined
+            }
+            to={
+              to ||
+              undefined
+            }
+            mapping={
+              userMap ??
+              undefined
+            }
+            mappingName={
+              hasAutomaticParticipantId ||
+              hasAmbiguousParticipantIds
+                ? "Participant ID"
+                : mappingLabel
+            }
           />
-        </div>
-      </div>
+        ) : activeView ===
+          "adherence" ? (
+          <AdherencePanel
+            studyId={
+              studyId
+            }
+            userIds={
+              hasImpossibleUserFilter
+                ? []
+                : effectiveUserIds.length
+                  ? effectiveUserIds
+                  : undefined
+            }
+            moduleIds={
+              moduleIds.length
+                ? moduleIds
+                : undefined
+            }
+            from={
+              from
+                ? from.slice(
+                    0,
+                    10,
+                  )
+                : undefined
+            }
+            to={
+              to
+                ? to.slice(
+                    0,
+                    10,
+                  )
+                : undefined
+            }
+            mapping={
+              userMap ??
+              undefined
+            }
+            mappingName={
+              hasAutomaticParticipantId ||
+              hasAmbiguousParticipantIds
+                ? "Participant ID"
+                : mappingLabel
+            }
+          />
+        ) : loading &&
+          rows ===
+            null ? (
+          <div
+            className={
+              styles.loadingState
+            }
+          >
+            <div
+              className={
+                styles.loadingIndicator
+              }
+              aria-hidden="true"
+            />
 
-      {/* Active view & pager */}
-      {!loading && rows && (
-        <>
-          {rows.length === 0 ? (
-            <div className="border rounded-lg p-4 text-sm text-gray-600 bg-white">
-              No results
+            <span>
+              Loading study
+              data…
+            </span>
+          </div>
+        ) : !loading &&
+          rows &&
+          rows.length ===
+            0 ? (
+          <div
+            className={
+              styles.emptyState
+            }
+          >
+            <div
+              className={
+                styles.emptyMarker
+              }
+              aria-hidden="true"
+            />
+
+            <div>
+              <p
+                className={
+                  styles.emptyTitle
+                }
+              >
+                No results found
+              </p>
+
+              <p
+                className={
+                  styles.emptyDescription
+                }
+              >
+                There are no
+                records matching
+                the current
+                filters.
+              </p>
             </div>
-          ) : activeView === "table" ? (
-            <TableViewV2
-              rows={rows}
-              mapping={userMap ?? undefined}
-              mappingName={mappingLabel}
-            />
-          ) : activeView === "calendar" ? (
-            <CalendarViewV2
-              rows={rows}
-              mapping={userMap ?? undefined}
-              mappingName={mappingLabel}
-            />
-          ) : activeView === "visualize" ? (
-            <SleepVizPanel
-              studyId={studyId}
-              userIds={effectiveUserIds.length ? effectiveUserIds : undefined}
-              from={from || undefined}
-              to={to || undefined}
-              mapping={userMap ?? undefined}
-              mappingName={mappingLabel}
-            />
-          ) : activeView === "adherence" ? (
-            <AdherencePanel
-              studyId={studyId}
-              userIds={
-                effectiveUserIds.length
-                  ? effectiveUserIds
-                  : undefined
-              }
-              moduleIds={
-                moduleIds.length
-                  ? moduleIds
-                  : undefined
-              }
-              from={
-                from
-                  ? from.slice(0, 10)
-                  : undefined
-              }
-              to={
-                to
-                  ? to.slice(0, 10)
-                  : undefined
-              }
-              mapping={
-                userMap ?? undefined
-              }
-              mappingName={mappingLabel}
-            />
-          ) : (
-            <EventTimeline
-              studyId={studyId}
-              rows={rows}
-              userIds={
-                effectiveUserIds.length
-                  ? effectiveUserIds
-                  : undefined
-              }
-              moduleIds={
-                moduleIds.length
-                  ? moduleIds
-                  : undefined
-              }
-              from={from || undefined}
-              to={to || undefined}
-              mapping={userMap ?? undefined}
-              mappingName={mappingLabel}
-            />
-          )}
+          </div>
+        ) : rows &&
+          rows.length >
+            0 ? (
+          <>
+            {activeView ===
+            "table" ? (
+              <TableViewV2
+                rows={
+                  rows
+                }
+                mapping={
+                  userMap ??
+                  undefined
+                }
+                mappingName={
+                  hasAutomaticParticipantId ||
+                  hasAmbiguousParticipantIds
+                    ? "Participant ID"
+                    : mappingLabel
+                }
+              />
+            ) : (
+              <EventTimeline
+                studyId={
+                  studyId
+                }
+                rows={
+                  rows
+                }
+                userIds={
+                  hasImpossibleUserFilter
+                    ? []
+                    : effectiveUserIds.length
+                      ? effectiveUserIds
+                      : undefined
+                }
+                moduleIds={
+                  moduleIds.length
+                    ? moduleIds
+                    : undefined
+                }
+                from={
+                  from ||
+                  undefined
+                }
+                to={
+                  to ||
+                  undefined
+                }
+                mapping={
+                  userMap ??
+                  undefined
+                }
+                mappingName={
+                  hasAutomaticParticipantId ||
+                  hasAmbiguousParticipantIds
+                    ? "Participant ID"
+                    : mappingLabel
+                }
+              />
+            )}
 
-          {activeView === "table" && (
-            <div className={styles.pager}>
-              <button
-                className={styles.btn}
-                onClick={() => {
-                  if (page > 1) {
-                    const next = page - 1;
-                    setPage(next);
-                    load(next);
+            {activeView ===
+              "table" && (
+              <div
+                className={
+                  styles.pager
+                }
+              >
+                <button
+                  type="button"
+                  className={
+                    styles.pagerButton
                   }
-                }}
-                disabled={page === 1 || loading}
-              >
-                Previous
-              </button>
-              <div className="text-sm">Page {page}</div>
-              <button
-                className={styles.btn}
-                onClick={() => {
-                  const next = page + 1;
-                  setPage(next);
-                  load(next);
-                }}
-                disabled={loading || rows.length < TABLE_PAGE_SIZE}
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </>
-      )}
+                  onClick={() => {
+                    if (
+                      page >
+                      1
+                    ) {
+                      const nextPage =
+                        page -
+                        1;
 
-      {error && <div className="text-sm text-red-600 mt-2">{error}</div>}
+                      setPage(
+                        nextPage,
+                      );
+
+                      void loadStandardRows(
+                        nextPage,
+                      );
+                    }
+                  }}
+                  disabled={
+                    page ===
+                      1 ||
+                    loading
+                  }
+                >
+                  ← Previous
+                </button>
+
+                <span
+                  className={
+                    styles.pageNumber
+                  }
+                >
+                  Page{" "}
+                  {
+                    page
+                  }
+                </span>
+
+                <button
+                  type="button"
+                  className={
+                    styles.pagerButton
+                  }
+                  onClick={() => {
+                    const nextPage =
+                      page +
+                      1;
+
+                    setPage(
+                      nextPage,
+                    );
+
+                    void loadStandardRows(
+                      nextPage,
+                    );
+                  }}
+                  disabled={
+                    loading ||
+                    rows.length <
+                      TABLE_PAGE_SIZE
+                  }
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
+        ) : null}
+      </section>
     </div>
   );
 }

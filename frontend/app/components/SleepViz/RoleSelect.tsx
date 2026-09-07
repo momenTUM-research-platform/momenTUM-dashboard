@@ -1,39 +1,200 @@
 "use client";
-import { InferredStudyQuestion } from "@/lib/types";
 
-export function RoleSelect(props: {
-  title: string;
+import {
+  useMemo,
+} from "react";
+
+import type {
+  InferredStudyQuestion,
+} from "../../lib/types";
+
+import styles from "./SleepVizPanel.module.css";
+
+type Props = {
+  label: string;
+  description?: string;
+  questions: InferredStudyQuestion[];
   value: string;
-  setValue: (v: string) => void;
-  groups: Array<{ module_id: string; module_name: string; items: InferredStudyQuestion[] }>;
-  filter: (q: InferredStudyQuestion) => boolean;
-  placeholder: string;
+  onChange: (
+    value: string,
+  ) => void;
+  required?: boolean;
   optional?: boolean;
-  className?: string;
-}) {
-  const { title, value, setValue, groups, filter, placeholder, optional, className } = props;
+  placeholder?: string;
+};
+
+type QuestionGroup = {
+  module_id: string;
+  module_name: string;
+  items: InferredStudyQuestion[];
+};
+
+function questionValue(
+  question: InferredStudyQuestion,
+): string {
+  return `${question.module_id}:${question.question_id}`;
+}
+
+export default function RoleSelect({
+  label,
+  description,
+  questions,
+  value,
+  onChange,
+  required = false,
+  optional = false,
+  placeholder = "Select a question",
+}: Props) {
+  const groups =
+    useMemo<QuestionGroup[]>(() => {
+      const grouped =
+        new Map<
+          string,
+          QuestionGroup
+        >();
+
+      for (
+        const question
+        of questions ?? []
+      ) {
+        const existing =
+          grouped.get(
+            question.module_id,
+          );
+
+        if (existing) {
+          existing.items.push(
+            question,
+          );
+
+          continue;
+        }
+
+        grouped.set(
+          question.module_id,
+          {
+            module_id:
+              question.module_id,
+
+            module_name:
+              question.module_name ||
+              question.module_id,
+
+            items: [
+              question,
+            ],
+          },
+        );
+      }
+
+      return Array.from(
+        grouped.values(),
+      );
+    }, [
+      questions,
+    ]);
+
   return (
-    <div className={className ?? "field"}>
-      <label>{title}</label>
-      <select
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
+    <div
+      className={
+        styles.roleField
+      }
+    >
+      <label
+        className={
+          styles.roleLabel
+        }
       >
-        <option value="">{optional ? "— None —" : placeholder}</option>
-        {groups.map((g) => (
-          <optgroup key={g.module_id} label={g.module_name || g.module_id}>
-            {g.items.filter(filter).map((q) => {
-              const val = `${q.module_id}:${q.question_id}`;
-              return (
-                <option key={val} value={val}>
-                  {q.question_text}
-                </option>
-              );
-            })}
-          </optgroup>
-        ))}
-      </select>
+        <span>
+          {label}
+
+          {required && (
+            <span
+              aria-hidden="true"
+            >
+              {" *"}
+            </span>
+          )}
+        </span>
+
+        {description && (
+          <span
+            className={
+              styles.roleDescription
+            }
+          >
+            {description}
+          </span>
+        )}
+
+        <select
+          className={
+            styles.select
+          }
+          value={value}
+          onChange={(
+            event,
+          ) =>
+            onChange(
+              event.target.value,
+            )
+          }
+          required={
+            required
+          }
+        >
+          <option value="">
+            {optional
+              ? "— None —"
+              : placeholder}
+          </option>
+
+          {groups.map(
+            (group) => (
+              <optgroup
+                key={
+                  group.module_id
+                }
+                label={
+                  group.module_name
+                }
+              >
+                {group.items.map(
+                  (question) => (
+                    <option
+                      key={
+                        questionValue(
+                          question,
+                        )
+                      }
+                      value={
+                        questionValue(
+                          question,
+                        )
+                      }
+                    >
+                      {question.question_text ||
+                        question.question_id}
+                    </option>
+                  ),
+                )}
+              </optgroup>
+            ),
+          )}
+        </select>
+      </label>
+
+      {questions.length ===
+        0 && (
+        <div
+          className={
+            styles.roleEmpty
+          }
+        >
+          No compatible questions
+          available.
+        </div>
+      )}
     </div>
   );
 }

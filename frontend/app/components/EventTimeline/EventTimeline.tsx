@@ -2,15 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useAuth } from "@/app/context/AuthContext";
+
 import {
   fetchParticipantEvents,
   ParticipantEventsOut,
   TrackingEvent,
 } from "@/app/lib/events";
 
-import {
-  fetchLabeledResponses,
-} from "@/app/lib/responses";
+import { fetchLabeledResponses } from "@/app/lib/responses";
 
 import { LabeledSurveyResponseOut } from "@/app/types/schemas";
 
@@ -69,10 +69,8 @@ function stringValue(
 function numberValue(
   value: unknown,
 ): number | null {
-  return (
-    typeof value === "number" &&
+  return typeof value === "number" &&
     Number.isFinite(value)
-  )
     ? value
     : null;
 }
@@ -106,7 +104,7 @@ function formatTimestamp(
         },
       ).format(date);
     } catch {
-      // Fall through to the dashboard/browser timezone.
+      // Fall back to the dashboard/browser timezone if the event timezone is invalid.
     }
   }
 
@@ -114,88 +112,6 @@ function formatTimestamp(
     undefined,
     options,
   ).format(date);
-}
-
-function DayGroup({
-  group,
-  onViewResponse,
-  responseLoading,
-  defaultOpen,
-}: {
-  group: {
-    key: string;
-    label: string;
-    events: TrackingEvent[];
-  };
-  onViewResponse: (
-    event: TrackingEvent,
-  ) => void;
-  responseLoading: boolean;
-  defaultOpen: boolean;
-}) {
-  const [open, setOpen] =
-    useState(defaultOpen);
-
-  return (
-    <section
-      className={
-        styles.dayGroup
-      }
-    >
-      <button
-        type="button"
-        className={
-          styles.dayHeader
-        }
-        onClick={() =>
-          setOpen(
-            (current) =>
-              !current,
-          )
-        }
-        aria-expanded={open}
-      >
-        <span>
-          {open ? "▼" : "▶"}{" "}
-          {group.label}
-        </span>
-
-        <span
-          className={
-            styles.dayCount
-          }
-        >
-          {group.events.length}
-        </span>
-      </button>
-
-      {open && (
-        <div
-          className={
-            styles.timeline
-          }
-        >
-          {group.events.map(
-            (event) => (
-              <TimelineEvent
-                key={
-                  event._id ??
-                  `${event.timestamp}-${event.event_type}-${event.task_id ?? ""}`
-                }
-                event={event}
-                responseLoading={
-                  responseLoading
-                }
-                onViewResponse={
-                  onViewResponse
-                }
-              />
-            ),
-          )}
-        </div>
-      )}
-    </section>
-  );
 }
 
 function formatDuration(
@@ -253,7 +169,7 @@ function humanizeEventType(
       return "Notification queue updated";
 
     case "notification_delivered":
-      return "Notification delivered";
+      return "Delivery event recorded";
 
     case "notification_tapped":
       return "Notification tapped";
@@ -269,6 +185,9 @@ function humanizeEventType(
 
     case "unenrolled":
       return "Unenrolled";
+
+    case "study_progress_recovered":
+      return "Study progress recovered";
 
     default:
       return eventType;
@@ -369,6 +288,9 @@ function eventSymbol(
     case "unenrolled":
       return "×";
 
+    case "study_progress_recovered":
+      return "↻";
+
     default:
       return "•";
   }
@@ -467,17 +389,14 @@ function queueEventMatchesModules(
 ): boolean {
   const collections = [
     getNotifications(event),
-
     getNotificationEntries(
       event,
       "added_notifications",
     ),
-
     getNotificationEntries(
       event,
       "removed_notifications",
     ),
-
     getNotificationEntries(
       event,
       "rescheduled_notifications",
@@ -725,7 +644,9 @@ function EventDetails({
 
   return (
     <div
-      className={styles.details}
+      className={
+        styles.details
+      }
     >
       {event.task_id && (
         <div
@@ -734,7 +655,6 @@ function EventDetails({
           }
         >
           <span>Task</span>
-
           <code>
             {event.task_id}
           </code>
@@ -748,7 +668,6 @@ function EventDetails({
           }
         >
           <span>Module</span>
-
           <span>
             {readableModuleName}
           </span>
@@ -762,7 +681,6 @@ function EventDetails({
           }
         >
           <span>Module ID</span>
-
           <code>
             {event.module_id}
           </code>
@@ -776,7 +694,6 @@ function EventDetails({
           }
         >
           <span>Type</span>
-
           <span>
             {taskType}
           </span>
@@ -790,7 +707,6 @@ function EventDetails({
           }
         >
           <span>Scheduled</span>
-
           <span>
             {formatTimestamp(
               scheduledAt,
@@ -807,7 +723,6 @@ function EventDetails({
           }
         >
           <span>Duration</span>
-
           <strong>
             {formatDuration(
               duration,
@@ -823,7 +738,6 @@ function EventDetails({
           }
         >
           <span>Platform</span>
-
           <span>
             {platform}
           </span>
@@ -842,7 +756,6 @@ function EventDetails({
             <span>
               Notification ID
             </span>
-
             <code>
               {String(
                 notificationId,
@@ -860,7 +773,6 @@ function EventDetails({
           <span>
             Queue refresh reason
           </span>
-
           <span>
             {humanizeReason(
               reason,
@@ -878,7 +790,6 @@ function EventDetails({
           <span>
             Queue status
           </span>
-
           <span>
             {humanizeQueueStatus(
               status,
@@ -1273,6 +1184,88 @@ function TimelineEvent({
   );
 }
 
+function DayGroup({
+  group,
+  onViewResponse,
+  responseLoading,
+  defaultOpen,
+}: {
+  group: {
+    key: string;
+    label: string;
+    events: TrackingEvent[];
+  };
+  onViewResponse: (
+    event: TrackingEvent,
+  ) => void;
+  responseLoading: boolean;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] =
+    useState(defaultOpen);
+
+  return (
+    <section
+      className={
+        styles.dayGroup
+      }
+    >
+      <button
+        type="button"
+        className={
+          styles.dayHeader
+        }
+        onClick={() =>
+          setOpen(
+            (current) =>
+              !current,
+          )
+        }
+        aria-expanded={open}
+      >
+        <span>
+          {open ? "▼" : "▶"}{" "}
+          {group.label}
+        </span>
+
+        <span
+          className={
+            styles.dayCount
+          }
+        >
+          {group.events.length}
+        </span>
+      </button>
+
+      {open && (
+        <div
+          className={
+            styles.timeline
+          }
+        >
+          {group.events.map(
+            (event) => (
+              <TimelineEvent
+                key={
+                  event._id ??
+                  `${event.timestamp}-${event.event_type}-${event.task_id ?? ""}`
+                }
+                event={event}
+                responseLoading={
+                  responseLoading
+                }
+                onViewResponse={
+                  onViewResponse
+                }
+              />
+            ),
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function getLocalDateKeyAndLabel(
   event: TrackingEvent,
 ): {
@@ -1514,6 +1507,26 @@ export default function EventTimeline({
   mapping,
   mappingName,
 }: Props) {
+  const { user } =
+    useAuth();
+
+  const canViewDiagnostics =
+    user?.role === "admin";
+
+  const [
+    showDiagnostics,
+    setShowDiagnostics,
+  ] =
+    useState(false);
+
+  /*
+   * The backend independently enforces admin access. This flag only controls
+   * whether the admin UI asks the API to include diagnostic telemetry.
+   */
+  const diagnosticsEnabled =
+    canViewDiagnostics &&
+    showDiagnostics;
+
   const [data, setData] =
     useState<
       ParticipantEventsOut | null
@@ -1606,9 +1619,9 @@ export default function EventTimeline({
         );
 
       /*
-       * The Events view may only have a limited response batch loaded
-       * by its parent. If the matching submission is not present,
-       * retrieve responses for this participant/module directly.
+       * The parent view may only contain a limited response batch.
+       * Fetch participant/module responses directly when the matching
+       * submission is not present locally.
        */
       if (!response) {
         candidates =
@@ -1705,7 +1718,6 @@ export default function EventTimeline({
     if (!selectedUser) {
       setData(null);
       setError(null);
-
       return;
     }
 
@@ -1723,6 +1735,8 @@ export default function EventTimeline({
               studyId,
               userId:
                 selectedUser,
+              includeDiagnostics:
+                diagnosticsEnabled,
               limit: 2000,
             },
           );
@@ -1764,6 +1778,7 @@ export default function EventTimeline({
   }, [
     studyId,
     selectedUser,
+    diagnosticsEnabled,
   ]);
 
   const filteredEvents =
@@ -1966,19 +1981,74 @@ export default function EventTimeline({
 
         <div
           className={
-            styles.eventCount
+            styles.headerActions
           }
         >
-          {
-            filteredEvents.length
-          }{" "}
-          event
-          {filteredEvents.length ===
-          1
-            ? ""
-            : "s"}
+          <div
+            className={
+              styles.eventCount
+            }
+          >
+            {
+              filteredEvents.length
+            }{" "}
+            event
+            {filteredEvents.length ===
+            1
+              ? ""
+              : "s"}
+          </div>
+
+          {canViewDiagnostics && (
+            <label
+              className={
+                styles.diagnosticsToggle
+              }
+            >
+              <input
+                type="checkbox"
+                checked={
+                  showDiagnostics
+                }
+                onChange={(
+                  event,
+                ) =>
+                  setShowDiagnostics(
+                    event.target
+                      .checked,
+                  )
+                }
+              />
+
+              <span>
+                Show diagnostics
+              </span>
+            </label>
+          )}
         </div>
       </div>
+
+      {diagnosticsEnabled && (
+        <div
+          className={
+            styles.diagnosticsNotice
+          }
+        >
+          <strong>
+            Diagnostic view
+          </strong>
+
+          <span>
+            Diagnostic events include
+            best-effort mobile and
+            operating-system telemetry.
+            Missing notification delivery
+            events do not mean that a
+            notification was not
+            delivered.
+          </span>
+        </div>
+      )}
 
       {!filteredEvents.length ? (
         <div
@@ -1990,29 +2060,40 @@ export default function EventTimeline({
           the selected filters.
         </div>
       ) : (
-        <div className={styles.days}>
-        {groups.map(
-          (group, index) => (
-            <DayGroup
-              key={group.key}
-              group={group}
-              defaultOpen={
-                index === 0
-              }
-              responseLoading={
-                detailLoading
-              }
-              onViewResponse={(
-                event,
-              ) => {
-                void openSubmittedResponse(
+        <div
+          className={
+            styles.days
+          }
+        >
+          {groups.map(
+            (
+              group,
+              index,
+            ) => (
+              <DayGroup
+                key={
+                  group.key
+                }
+                group={
+                  group
+                }
+                defaultOpen={
+                  index === 0
+                }
+                responseLoading={
+                  detailLoading
+                }
+                onViewResponse={(
                   event,
-                );
-              }}
-            />
-          ),
-        )}
-      </div>
+                ) => {
+                  void openSubmittedResponse(
+                    event,
+                  );
+                }}
+              />
+            ),
+          )}
+        </div>
       )}
 
       {detailError && (

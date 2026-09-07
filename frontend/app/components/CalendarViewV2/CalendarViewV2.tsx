@@ -1,357 +1,1890 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from "react";
-import type { CalendarApi } from "@fullcalendar/core"
-import FullCalendar, { EventClickArg } from "@fullcalendar/react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import FullCalendar, {
+  EventClickArg,
+} from "@fullcalendar/react";
+
+import type {
+  CalendarApi,
+  DateClickArg,
+  DatesSetArg,
+  EventContentArg,
+} from "@fullcalendar/core";
+
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import styles from "./CalendarViewV2.module.css";
+
+import {
+  CalendarNote,
+  createCalendarNote,
+  deleteCalendarNote,
+  fetchCalendarNotes,
+  updateCalendarNote,
+} from "@/app/lib/calendarNotes";
+
 import { LabeledSurveyResponseOut } from "@/app/types/schemas";
 
-import EventDetail, { ExtendedEventProps } from "../EventDetail/EventDetail";
-import NoteModal from "../NoteModal/NoteModal";
+import EventDetail, {
+  ExtendedEventProps,
+} from "../EventDetail/EventDetail";
+
+import NoteModal, {
+  NoteParticipant,
+} from "../NoteModal/NoteModal";
+
 import NoteViewerModal from "../NoteModal/NoteViewerModal";
 
-/**
- * Calendar view for labeled schema (v2).
- * - Group by (user_id, module_id, YYYY-MM-DD).
- * - Optionally display a mapped label for each user (e.g., participant_id).
- * - Clicking an event opens EventDetail (with per-question answer arrays and timestamps).
- * - Day cells support per-date notes per participant (stored in localStorage).
- */
+import styles from "./CalendarViewV2.module.css";
 
-type Mapping = Record<string, string>;
+type Mapping = Record<
+  string,
+  string
+>;
+
+export type CalendarVisibleRange = {
+  from: string;
+  to: string;
+  focusDate: string;
+};
 
 type Props = {
+  studyId: string;
+
   rows: LabeledSurveyResponseOut[];
-  mapping?: Mapping;           // user_id -> pretty label
-  mappingName?: string;        // e.g. "Participant ID"
+
+  mapping?: Mapping;
+
+  mappingName?: string;
+
+  loading?: boolean;
+
+  initialDate?: string;
+
+  onRangeChange?: (
+    range: CalendarVisibleRange,
+  ) => void;
+};
+
+type AggregatedAnswer = {
+  answers: unknown[];
+  responseTimes: string[];
+  alertTimes: Array<
+    string | null
+  >;
 };
 
 type Bucket = {
   user_id: string;
-  mapped_label: string | null;
+
+  mapped_label:
+    | string
+    | null;
+
   module_id: string;
+
   module_name: string;
-  date: string; // YYYY-MM-DD
-  // aggregated QA: question -> { answers: any[], responseTimes: string[] }
-  aggregated: Record<string, { answers: any[]; responseTimes: string[] }>;
-  // representative times (for info)
+
+  date: string;
+
+  aggregated: Record<
+    string,
+    AggregatedAnswer
+  >;
+
   response_times: string[];
+
+  alert_times: Array<
+    string | null
+  >;
 };
 
-const palette = ["#2f80ed","#e53e3e","#38a169","#d69e2e","#805ad5","#dd6b20","#0ea5e9","#14b8a6"];
-const hash = (s: string) => {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
-  return Math.abs(h);
+type NoteRange = {
+  from: string;
+  to: string;
 };
-const colorKeyFor = (userId: string, mapped?: string | null) => mapped ?? userId;
-const colorFor = (key: string) => palette[hash(key) % palette.length];
 
-// Notes storage key (v2 to avoid collisions with older view)
-const NOTES_KEY = "calendarNotesV2";
+type ResponseTimeBounds = {
+  start: string;
+  end: string;
+};
 
-/** Build the display key for a user for the notes UI. */
-const userDisplayKey = (userId: string, mapped?: string | null) =>
-  mapped ? `${mapped} (${userId})` : userId;
+type ParticipantColor = {
+  background: string;
+  border: string;
+};
 
-/** Convert a bucket to EventDetail payload. */
-const bucketToExtended = (b: Bucket): ExtendedEventProps => {
-  const details: Record<string, any> = {};
-  // Pass the aggregated shape that EventDetail understands (answers[] + responseTimes[])
-  for (const [q, agg] of Object.entries(b.aggregated)) {
-    details[q] = {
-      answers: agg.answers,
-      responseTimes: agg.responseTimes,
-    };
+const MIN_RESPONSE_EVENT_DURATION_MS =
+  20 * 60 * 1000;
+
+const PARTICIPANT_COLORS: ParticipantColor[] = [
+  {
+    background: "#eef1fa",
+    border: "#c9d0e8",
+  },
+  {
+    background: "#edf5f1",
+    border: "#c3d9cd",
+  },
+  {
+    background: "#f6f0e9",
+    border: "#ddcdbb",
+  },
+  {
+    background: "#f3eef6",
+    border: "#d6c7df",
+  },
+  {
+    background: "#edf4f6",
+    border: "#c4d8dd",
+  },
+  {
+    background: "#f7eeee",
+    border: "#dfc6c6",
+  },
+  {
+    background: "#f4f3e9",
+    border: "#d9d5b7",
+  },
+  {
+    background: "#eef4ec",
+    border: "#c8d8c2",
+  },
+  {
+    background: "#f1eff8",
+    border: "#cec9e4",
+  },
+  {
+    background: "#f6f1ed",
+    border: "#ddcec4",
+  },
+];
+
+function getParticipantColor(
+  userId: string,
+): ParticipantColor {
+  let hash = 0;
+
+  for (
+    let index = 0;
+    index < userId.length;
+    index += 1
+  ) {
+    hash =
+      (
+        hash * 31 +
+        userId.charCodeAt(
+          index,
+        )
+      ) >>> 0;
   }
-  // Use the *latest* response_time as representative
-  const responseTime = (() => {
-    if (!b.response_times.length) return undefined;
-    const latest = b.response_times
-      .map((t) => new Date(t).getTime())
-      .reduce((a, b) => Math.max(a, b), 0);
-    return new Date(latest).toISOString();
-  })();
+
+  return PARTICIPANT_COLORS[
+    hash %
+      PARTICIPANT_COLORS.length
+  ];
+}
+
+function localDateKey(
+  value: string | Date,
+): string {
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  const year =
+    date.getFullYear();
+
+  const month =
+    String(
+      date.getMonth() + 1,
+    ).padStart(
+      2,
+      "0",
+    );
+
+  const day =
+    String(
+      date.getDate(),
+    ).padStart(
+      2,
+      "0",
+    );
+
+  return `${year}-${month}-${day}`;
+}
+
+function getResponseTimeBounds(
+  times: string[],
+): ResponseTimeBounds | null {
+  const validTimes =
+    times
+      .map(
+        (value) => ({
+          value,
+
+          date:
+            new Date(
+              value,
+            ),
+
+          timestamp:
+            new Date(
+              value,
+            ).getTime(),
+        }),
+      )
+      .filter(
+        (
+          entry,
+        ): entry is {
+          value: string;
+          date: Date;
+          timestamp: number;
+        } =>
+          Number.isFinite(
+            entry.timestamp,
+          ),
+      )
+      .sort(
+        (a, b) =>
+          a.timestamp -
+          b.timestamp,
+      );
+
+  if (
+    validTimes.length ===
+    0
+  ) {
+    return null;
+  }
+
+  const first =
+    validTimes[0];
+
+  const last =
+    validTimes[
+      validTimes.length - 1
+    ];
+
+  /*
+   * Very short response groups receive a minimum visual duration
+   * in week/day views. Keep that synthetic duration inside the
+   * actual submission day so late-night responses never spill
+   * visually into the following date.
+   */
+  const nextLocalMidnight =
+    new Date(
+      first.date.getFullYear(),
+      first.date.getMonth(),
+      first.date.getDate() + 1,
+      0,
+      0,
+      0,
+      0,
+    ).getTime();
+
+  const desiredEnd =
+    Math.max(
+      last.timestamp,
+      first.timestamp +
+        MIN_RESPONSE_EVENT_DURATION_MS,
+    );
+
+  const visualEnd =
+    Math.min(
+      desiredEnd,
+      nextLocalMidnight,
+    );
 
   return {
-    extractedStudyId: b.mapped_label ?? b.user_id,
-    moduleName: b.module_name,
+    start:
+      new Date(
+        first.timestamp,
+      ).toISOString(),
+
+    end:
+      new Date(
+        visualEnd,
+      ).toISOString(),
+  };
+}
+
+function getEarlierPromptCount(
+  bucket: Bucket,
+): number {
+  let count = 0;
+
+  for (
+    let index = 0;
+    index <
+    bucket.response_times.length;
+    index += 1
+  ) {
+    const responseTime =
+      bucket.response_times[
+        index
+      ];
+
+    const alertTime =
+      bucket.alert_times[
+        index
+      ];
+
+    if (
+      !responseTime ||
+      !alertTime
+    ) {
+      continue;
+    }
+
+    const responseDate =
+      localDateKey(
+        responseTime,
+      );
+
+    const scheduledDate =
+      localDateKey(
+        alertTime,
+      );
+
+    if (
+      scheduledDate <
+      responseDate
+    ) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function bucketToExtended(
+  bucket: Bucket,
+): ExtendedEventProps {
+  const details: Record<
+    string,
+    unknown
+  > = {};
+
+  for (const [
+    question,
+    aggregate,
+  ] of Object.entries(
+    bucket.aggregated,
+  )) {
+    details[question] = {
+      answers:
+        aggregate.answers,
+
+      responseTimes:
+        aggregate.responseTimes,
+
+      alertTimes:
+        aggregate.alertTimes,
+    };
+  }
+
+  const validTimes =
+    bucket.response_times
+      .map(
+        (value) =>
+          new Date(
+            value,
+          ).getTime(),
+      )
+      .filter(
+        Number.isFinite,
+      );
+
+  const responseTime =
+    validTimes.length >
+    0
+      ? new Date(
+          Math.max(
+            ...validTimes,
+          ),
+        ).toISOString()
+      : undefined;
+
+  return {
+    extractedStudyId:
+      bucket.mapped_label ??
+      bucket.user_id,
+
+    moduleName:
+      bucket.module_name,
+
     responseTime,
+
     details,
+
     type: "structured",
   };
-};
+}
 
-export default function CalendarViewV2({ rows, mapping, mappingName = "Mapped ID" }: Props) {
-  // Event detail modal state
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailData, setDetailData] = useState<ExtendedEventProps | null>(null);
+function formatTime(
+  value: string,
+): string {
+  return new Date(
+    value,
+  ).toLocaleTimeString(
+    [],
+    {
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+  );
+}
 
-  // Notes modal state
-  const [noteModalOpen, setNoteModalOpen] = useState(false);
-  const [viewerModalOpen, setViewerModalOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedViewerNote, setSelectedViewerNote] = useState<{ user: string; note: string } | null>(null);
-  const [notes, setNotes] = useState<Record<string, { [user: string]: string }>>({});
-  const [allUsers, setAllUsers] = useState<string[]>([]); // for NoteModal selector
-  const calendarRef = useRef<FullCalendar | null>(null);
-  const lastAutoGoto = useRef<string | null>(null);
+function getTimeRange(
+  times: string[],
+): string {
+  const sorted =
+    times
+      .map(
+        (value) => ({
+          value,
 
-  // Load/save notes
-  useEffect(() => {
-    const raw = localStorage.getItem(NOTES_KEY);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as Record<string, { [user: string]: string }>;
-        setNotes(parsed);
-      } catch {
-        // ignore parse errors
+          timestamp:
+            new Date(
+              value,
+            ).getTime(),
+        }),
+      )
+      .filter(
+        (entry) =>
+          Number.isFinite(
+            entry.timestamp,
+          ),
+      )
+      .sort(
+        (a, b) =>
+          a.timestamp -
+          b.timestamp,
+      );
+
+  if (
+    sorted.length ===
+    0
+  ) {
+    return "";
+  }
+
+  const first =
+    formatTime(
+      sorted[0].value,
+    );
+
+  if (
+    sorted.length ===
+    1
+  ) {
+    return first;
+  }
+
+  const last =
+    formatTime(
+      sorted[
+        sorted.length - 1
+      ].value,
+    );
+
+  return first === last
+    ? first
+    : `${first}–${last}`;
+}
+
+function formatRangeLabel(
+  start: Date,
+  endExclusive: Date,
+): string {
+  const end =
+    new Date(
+      endExclusive.getTime() -
+        1,
+    );
+
+  const formatter =
+    new Intl.DateTimeFormat(
+      undefined,
+      {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      },
+    );
+
+  return `${formatter.format(
+    start,
+  )} – ${formatter.format(
+    end,
+  )}`;
+}
+
+export default function CalendarViewV2({
+  studyId,
+  rows,
+  mapping,
+  mappingName = "Participant ID",
+  loading = false,
+  initialDate,
+  onRangeChange,
+}: Props) {
+  const calendarRef =
+    useRef<FullCalendar | null>(
+      null,
+    );
+
+  const appliedInitialDate =
+    useRef(false);
+
+  const noteRequestId =
+    useRef(0);
+
+  const [
+    detailOpen,
+    setDetailOpen,
+  ] =
+    useState(false);
+
+  const [
+    detailData,
+    setDetailData,
+  ] =
+    useState<
+      ExtendedEventProps | null
+    >(null);
+
+  const [
+    rangeLabel,
+    setRangeLabel,
+  ] =
+    useState("");
+
+  const [
+    noteRange,
+    setNoteRange,
+  ] =
+    useState<NoteRange | null>(
+      null,
+    );
+
+  const [
+    notes,
+    setNotes,
+  ] =
+    useState<CalendarNote[]>(
+      [],
+    );
+
+  const [
+    notesLoading,
+    setNotesLoading,
+  ] =
+    useState(false);
+
+  const [
+    noteError,
+    setNoteError,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    addNoteOpen,
+    setAddNoteOpen,
+  ] =
+    useState(false);
+
+  const [
+    selectedDate,
+    setSelectedDate,
+  ] =
+    useState("");
+
+  const [
+    savingNote,
+    setSavingNote,
+  ] =
+    useState(false);
+
+  const [
+    selectedNote,
+    setSelectedNote,
+  ] =
+    useState<
+      CalendarNote | null
+    >(null);
+
+  const [
+    viewerOpen,
+    setViewerOpen,
+  ] =
+    useState(false);
+
+  const [
+    updatingNote,
+    setUpdatingNote,
+  ] =
+    useState(false);
+
+  const [
+    deletingNote,
+    setDeletingNote,
+  ] =
+    useState(false);
+
+  const participants =
+    useMemo<
+      NoteParticipant[]
+    >(() => {
+      const userIds =
+        new Set<string>();
+
+      for (const row of rows) {
+        userIds.add(
+          row.user_id,
+        );
       }
-    }
-  }, []);
-  const saveNotes = (obj: typeof notes) => {
-    setNotes(obj);
-    localStorage.setItem(NOTES_KEY, JSON.stringify(obj));
-  };
 
-  // Build the list of available user display keys for NoteModal (based on rows in view)
-  useEffect(() => {
-    const set = new Set<string>();
-    for (const r of rows) {
-      const display = userDisplayKey(r.user_id, mapping?.[r.user_id] ?? null);
-      set.add(display);
-    }
-    setAllUsers(Array.from(set).sort());
-  }, [rows, mapping]);
+      if (mapping) {
+        for (const userId of
+          Object.keys(mapping)) {
+          userIds.add(
+            userId,
+          );
+        }
+      }
 
-  // Build calendar events (grouped buckets)
-  const events = useMemo(() => {
-    const buckets = new Map<string, Bucket>(); // key = user|module|YYYY-MM-DD
+      return Array.from(
+        userIds,
+      )
+        .map(
+          (userId) => {
+            const mapped =
+              mapping?.[
+                userId
+              ];
 
-    for (const r of rows) {
-      const date = new Date(r.response_time).toISOString().slice(0, 10);
-      const key = `${r.user_id}|${r.module_id}|${date}`;
-      const mappedLabel = mapping ? (mapping[r.user_id] ?? null) : null;
+            return {
+              userId,
 
-      if (!buckets.has(key)) {
-        buckets.set(key, {
-          user_id: r.user_id,
-          mapped_label: mappedLabel,
-          module_id: r.module_id,
-          module_name: r.module_name,
+              label:
+                mapped &&
+                mapped !==
+                  userId
+                  ? `${mapped} · ${userId}`
+                  : userId,
+            };
+          },
+        )
+        .sort(
+          (a, b) =>
+            a.label.localeCompare(
+              b.label,
+            ),
+        );
+    }, [
+      rows,
+      mapping,
+    ]);
+
+  const participantLabelById =
+    useMemo(() => {
+      const labels =
+        new Map<
+          string,
+          string
+        >();
+
+      for (const participant of
+        participants) {
+        labels.set(
+          participant.userId,
+          mapping?.[
+            participant.userId
+          ] ??
+            participant.userId,
+        );
+      }
+
+      return labels;
+    }, [
+      participants,
+      mapping,
+    ]);
+
+  const buckets =
+    useMemo(() => {
+      const result =
+        new Map<
+          string,
+          Bucket
+        >();
+
+      for (const row of rows) {
+        const date =
+          localDateKey(
+            row.response_time,
+          );
+
+        const key = [
+          row.user_id,
+          row.module_id,
           date,
-          aggregated: {},
-          response_times: [],
-        });
-      }
-      const b = buckets.get(key)!;
-      if (!b.mapped_label && mappedLabel) b.mapped_label = mappedLabel;
+        ].join("|");
 
-      // Aggregate Q&A: keep arrays of answers and responseTimes per question
-      for (const a of r.answers) {
-        const q = a.question_text ?? a.question_id;
-        if (!b.aggregated[q]) b.aggregated[q] = { answers: [], responseTimes: [] };
-        b.aggregated[q].answers.push(a.answer);
-        b.aggregated[q].responseTimes.push(String(r.response_time));
+        const mappedLabel =
+          mapping?.[
+            row.user_id
+          ] ?? null;
+
+        let bucket =
+          result.get(key);
+
+        if (!bucket) {
+          bucket = {
+            user_id:
+              row.user_id,
+
+            mapped_label:
+              mappedLabel,
+
+            module_id:
+              row.module_id,
+
+            module_name:
+              row.module_name,
+
+            date,
+
+            aggregated: {},
+
+            response_times:
+              [],
+
+            alert_times:
+              [],
+          };
+
+          result.set(
+            key,
+            bucket,
+          );
+        }
+
+        if (
+          !bucket.mapped_label &&
+          mappedLabel
+        ) {
+          bucket.mapped_label =
+            mappedLabel;
+        }
+
+        const responseTime =
+          String(
+            row.response_time,
+          );
+
+        const alertTime =
+          row.alert_time
+            ? String(
+                row.alert_time,
+              )
+            : null;
+
+        bucket.response_times.push(
+          responseTime,
+        );
+
+        bucket.alert_times.push(
+          alertTime,
+        );
+
+        for (const answer of
+          row.answers) {
+          const question =
+            answer.question_text ??
+            answer.question_id;
+
+          if (
+            !bucket.aggregated[
+              question
+            ]
+          ) {
+            bucket.aggregated[
+              question
+            ] = {
+              answers: [],
+
+              responseTimes:
+                [],
+
+              alertTimes:
+                [],
+            };
+          }
+
+          bucket.aggregated[
+            question
+          ].answers.push(
+            answer.answer,
+          );
+
+          bucket.aggregated[
+            question
+          ].responseTimes.push(
+            responseTime,
+          );
+
+          bucket.aggregated[
+            question
+          ].alertTimes.push(
+            alertTime,
+          );
+        }
       }
-      b.response_times.push(String(r.response_time));
+
+      return Array.from(
+        result.values(),
+      );
+    }, [
+      rows,
+      mapping,
+    ]);
+
+  const responseEvents =
+    useMemo(
+      () =>
+        buckets.flatMap(
+          (bucket) => {
+            const timeBounds =
+              getResponseTimeBounds(
+                bucket.response_times,
+              );
+
+            if (!timeBounds) {
+              return [];
+            }
+
+            const participant =
+              bucket.mapped_label ??
+              bucket.user_id;
+
+            const participantColor =
+              getParticipantColor(
+                bucket.user_id,
+              );
+
+            const submissionCount =
+              bucket
+                .response_times
+                .length;
+
+            const earlierPromptCount =
+              getEarlierPromptCount(
+                bucket,
+              );
+
+            return [
+              {
+                id: `response:${[
+                  bucket.user_id,
+                  bucket.module_id,
+                  bucket.date,
+                ].join("|")}`,
+
+                title:
+                  bucket.module_name,
+
+                start:
+                  timeBounds.start,
+
+                end:
+                  timeBounds.end,
+
+                allDay: false,
+
+                backgroundColor:
+                  participantColor.background,
+
+                borderColor:
+                  participantColor.border,
+
+                textColor:
+                  "var(--text-primary)",
+
+                extendedProps: {
+                  kind:
+                    "response",
+
+                  bucket,
+
+                  participant,
+
+                  submissionCount,
+
+                  earlierPromptCount,
+
+                  timeRange:
+                    getTimeRange(
+                      bucket.response_times,
+                    ),
+                },
+              },
+            ];
+          },
+        ),
+      [buckets],
+    );
+
+  const noteEvents =
+    useMemo(
+      () =>
+        notes.map(
+          (note) => {
+            const participant =
+              note.user_id
+                ? participantLabelById.get(
+                    note.user_id,
+                  ) ??
+                  note.user_id
+                : null;
+
+            return {
+              id:
+                `note:${note.id}`,
+
+              title:
+                note.text,
+
+              start:
+                note.date,
+
+              allDay: true,
+
+              backgroundColor:
+                "var(--warning-subtle)",
+
+              borderColor:
+                "var(--warning-border)",
+
+              textColor:
+                "var(--text-primary)",
+
+              extendedProps: {
+                kind:
+                  "note",
+
+                note,
+
+                participant,
+              },
+            };
+          },
+        ),
+      [
+        notes,
+        participantLabelById,
+      ],
+    );
+
+  const events =
+    useMemo(
+      () => [
+        ...responseEvents,
+        ...noteEvents,
+      ],
+      [
+        responseEvents,
+        noteEvents,
+      ],
+    );
+
+  async function loadNotes(
+    range:
+      | NoteRange
+      | null = noteRange,
+  ) {
+    if (!range) {
+      return;
     }
 
-    return Array.from(buckets.values()).map((b) => {
-      const displayId = b.mapped_label ?? b.user_id;
-      const colorKey = colorKeyFor(b.user_id, b.mapped_label ?? null);
+    const requestId =
+      ++noteRequestId.current;
 
-      // derive latest time string for the chip
-      const latestMs = b.response_times.length
-        ? b.response_times.map((t) => +new Date(t)).reduce((a, c) => Math.max(a, c), 0)
-        : null;
-      const latestTimeStr = latestMs
-        ? new Date(latestMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        : "";
+    setNotesLoading(
+      true,
+    );
 
-      const submissionCount = b.response_times.length;
+    setNoteError(
+      null,
+    );
 
-      return {
-        title: `${b.module_name} • ${displayId}`,
-        start: b.date,          // date-only ISO
-        allDay: true,           // <-- all-day event, no "12p"
-        color: colorFor(colorKey),
-        textColor: "#fff",
-        extendedProps: b,       // keep bucket for the modal
-        submissionCount,
-        latestTimeStr,
-      };
-    });
-  }, [rows, mapping]);
+    try {
+      const response =
+        await fetchCalendarNotes(
+          studyId,
+          {
+            from_date:
+              range.from,
+
+            to_date:
+              range.to,
+          },
+        );
+
+      if (
+        requestId !==
+        noteRequestId.current
+      ) {
+        return;
+      }
+
+      setNotes(
+        response,
+      );
+    } catch (
+      caughtError: any
+    ) {
+      if (
+        requestId !==
+        noteRequestId.current
+      ) {
+        return;
+      }
+
+      setNoteError(
+        caughtError?.message ??
+          "Failed to load calendar notes.",
+      );
+
+      setNotes(
+        [],
+      );
+    } finally {
+      if (
+        requestId ===
+        noteRequestId.current
+      ) {
+        setNotesLoading(
+          false,
+        );
+      }
+    }
+  }
 
   useEffect(() => {
-    if (!rows?.length) return;
-  
-    // latest response_time across current (filtered) rows
-    const latestMs = rows
-      .map(r => +new Date(r.response_time))
-      .reduce((a, b) => Math.max(a, b), 0);
-  
-    const latestDate = new Date(latestMs);
-    const api: CalendarApi | undefined = calendarRef.current?.getApi?.();
-  
-    console.log("[Calendar] rows:", rows.length, "latestDate:", latestDate.toISOString(), "api:", !!api);
-  
-    requestAnimationFrame(() => {
-      const api2: CalendarApi | undefined = calendarRef.current?.getApi?.();
-      if (!api2) return;
-  
-      api2.gotoDate(latestDate);
-      console.log("[Calendar] gotoDate() done");
-    });
-  }, [rows]);
-
-  // Click opens EventDetail
-  const handleEventClick = (arg: EventClickArg) => {
-    const b = arg.event.extendedProps as Bucket;
-    setDetailData(bucketToExtended(b));
-    setDetailOpen(true);
-  };
-
-  // Helpers for notes
-  const addNote = (userKey: string, date: string, noteText: string) => {
-    const updated = { ...notes };
-    if (!updated[date]) updated[date] = {};
-    updated[date][userKey] = noteText;
-    saveNotes(updated);
-  };
-  const deleteNote = (userKey: string, date: string) => {
-    const updated = { ...notes };
-    if (updated[date]) {
-      delete updated[date][userKey];
-      if (Object.keys(updated[date]).length === 0) delete updated[date];
-      saveNotes(updated);
+    if (!noteRange) {
+      return;
     }
+
+    void loadNotes(
+      noteRange,
+    );
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    studyId,
+    noteRange?.from,
+    noteRange?.to,
+  ]);
+
+  useEffect(() => {
+    if (
+      !initialDate ||
+      appliedInitialDate.current
+    ) {
+      return;
+    }
+
+    const applyDate =
+      () => {
+        const api:
+          | CalendarApi
+          | undefined =
+          calendarRef.current?.getApi();
+
+        if (!api) {
+          return false;
+        }
+
+        api.gotoDate(
+          initialDate,
+        );
+
+        appliedInitialDate.current =
+          true;
+
+        return true;
+      };
+
+    if (applyDate()) {
+      return;
+    }
+
+    const frame =
+      requestAnimationFrame(
+        applyDate,
+      );
+
+    return () =>
+      cancelAnimationFrame(
+        frame,
+      );
+  }, [
+    initialDate,
+  ]);
+
+  const handleDatesSet = (
+    arg: DatesSetArg,
+  ) => {
+    setRangeLabel(
+      formatRangeLabel(
+        arg.start,
+        arg.end,
+      ),
+    );
+
+    const inclusiveEnd =
+      new Date(
+        arg.end.getTime() -
+          1,
+      );
+
+    setNoteRange({
+      from:
+        localDateKey(
+          arg.start,
+        ),
+
+      to:
+        localDateKey(
+          inclusiveEnd,
+        ),
+    });
+
+    onRangeChange?.({
+      from:
+        arg.start.toISOString(),
+
+      to:
+        inclusiveEnd.toISOString(),
+
+      focusDate:
+        arg.view.currentStart.toISOString(),
+    });
   };
+
+  const handleDateClick = (
+    arg: DateClickArg,
+  ) => {
+    setSelectedDate(
+      arg.dateStr.slice(
+        0,
+        10,
+      ),
+    );
+
+    setNoteError(
+      null,
+    );
+
+    setAddNoteOpen(
+      true,
+    );
+  };
+
+  const handleEventClick = (
+    arg: EventClickArg,
+  ) => {
+    const kind =
+      arg.event
+        .extendedProps
+        .kind;
+
+    if (
+      kind === "note"
+    ) {
+      const note =
+        arg.event
+          .extendedProps
+          .note as CalendarNote;
+
+      setSelectedNote(
+        note,
+      );
+
+      setNoteError(
+        null,
+      );
+
+      setViewerOpen(
+        true,
+      );
+
+      return;
+    }
+
+    const bucket =
+      arg.event
+        .extendedProps
+        .bucket as Bucket;
+
+    setDetailData(
+      bucketToExtended(
+        bucket,
+      ),
+    );
+
+    setDetailOpen(
+      true,
+    );
+  };
+
+  const saveNewNote =
+    async (input: {
+      userId:
+        | string
+        | null;
+
+      text: string;
+    }) => {
+      if (
+        !selectedDate
+      ) {
+        return;
+      }
+
+      setSavingNote(
+        true,
+      );
+
+      setNoteError(
+        null,
+      );
+
+      try {
+        const created =
+          await createCalendarNote(
+            studyId,
+            {
+              date:
+                selectedDate,
+
+              user_id:
+                input.userId,
+
+              text:
+                input.text,
+            },
+          );
+
+        setNotes(
+          (previous) => [
+            ...previous,
+            created,
+          ],
+        );
+
+        setAddNoteOpen(
+          false,
+        );
+      } catch (
+        caughtError: any
+      ) {
+        setNoteError(
+          caughtError?.message ??
+            "Failed to save note.",
+        );
+      } finally {
+        setSavingNote(
+          false,
+        );
+      }
+    };
+
+  const saveExistingNote =
+    async (
+      text: string,
+    ) => {
+      if (
+        !selectedNote
+      ) {
+        return;
+      }
+
+      setUpdatingNote(
+        true,
+      );
+
+      setNoteError(
+        null,
+      );
+
+      try {
+        const updated =
+          await updateCalendarNote(
+            studyId,
+            selectedNote.id,
+            text,
+          );
+
+        setNotes(
+          (previous) =>
+            previous.map(
+              (note) =>
+                note.id ===
+                updated.id
+                  ? updated
+                  : note,
+            ),
+        );
+
+        setSelectedNote(
+          updated,
+        );
+      } catch (
+        caughtError: any
+      ) {
+        setNoteError(
+          caughtError?.message ??
+            "Failed to update note.",
+        );
+      } finally {
+        setUpdatingNote(
+          false,
+        );
+      }
+    };
+
+  const removeNote =
+    async () => {
+      if (
+        !selectedNote
+      ) {
+        return;
+      }
+
+      setDeletingNote(
+        true,
+      );
+
+      setNoteError(
+        null,
+      );
+
+      try {
+        await deleteCalendarNote(
+          studyId,
+          selectedNote.id,
+        );
+
+        setNotes(
+          (previous) =>
+            previous.filter(
+              (note) =>
+                note.id !==
+                selectedNote.id,
+            ),
+        );
+
+        setViewerOpen(
+          false,
+        );
+
+        setSelectedNote(
+          null,
+        );
+      } catch (
+        caughtError: any
+      ) {
+        setNoteError(
+          caughtError?.message ??
+            "Failed to delete note.",
+        );
+      } finally {
+        setDeletingNote(
+          false,
+        );
+      }
+    };
+
+  const renderEventContent = (
+    arg: EventContentArg,
+  ) => {
+    const kind =
+      arg.event
+        .extendedProps
+        .kind;
+
+    if (
+      kind === "note"
+    ) {
+      const {
+        note,
+        participant,
+      } =
+        arg.event
+          .extendedProps as {
+          note: CalendarNote;
+
+          participant:
+            | string
+            | null;
+        };
+
+      return (
+        <div
+          className={
+            styles.noteEventContent
+          }
+          title={
+            note.text
+          }
+        >
+          <div
+            className={
+              styles.noteEventHeader
+            }
+          >
+            <span
+              className={
+                styles.noteMarker
+              }
+              aria-hidden="true"
+            >
+              N
+            </span>
+
+            <span>
+              {participant ??
+                "Study note"}
+            </span>
+          </div>
+
+          <div
+            className={
+              styles.notePreview
+            }
+          >
+            {note.text}
+          </div>
+        </div>
+      );
+    }
+
+    const {
+      participant,
+      submissionCount,
+      earlierPromptCount,
+      timeRange,
+    } =
+      arg.event
+        .extendedProps as {
+        participant: string;
+
+        submissionCount: number;
+
+        earlierPromptCount: number;
+
+        timeRange: string;
+      };
+
+    return (
+      <div
+        className={
+          styles.eventContent
+        }
+      >
+        <div
+          className={
+            styles.eventModule
+          }
+          title={
+            arg.event.title
+          }
+        >
+          {arg.event.title}
+        </div>
+
+        <div
+          className={
+            styles.eventParticipant
+          }
+          title={
+            participant
+          }
+        >
+          {participant}
+        </div>
+
+        <div
+          className={
+            styles.eventMeta
+          }
+        >
+          <span>
+            {submissionCount}{" "}
+            {submissionCount ===
+            1
+              ? "response"
+              : "responses"}
+          </span>
+
+          {timeRange && (
+            <>
+              <span
+                className={
+                  styles.metaSeparator
+                }
+                aria-hidden="true"
+              >
+                ·
+              </span>
+
+              <span>
+                {timeRange}
+              </span>
+            </>
+          )}
+        </div>
+
+        {earlierPromptCount >
+          0 && (
+          <div
+            className={
+              styles.eventScheduleMeta
+            }
+          >
+            {earlierPromptCount}{" "}
+            {earlierPromptCount ===
+            1
+              ? "earlier prompt"
+              : "earlier prompts"}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const selectedNoteParticipantLabel =
+    selectedNote
+      ?.user_id
+      ? participantLabelById.get(
+          selectedNote.user_id,
+        ) ??
+        selectedNote.user_id
+      : undefined;
 
   return (
-    <div className={styles.wrapper}>
-      <FullCalendar
-        ref={calendarRef}
-        key={JSON.stringify(notes)} // re-render day cells when notes change
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView="dayGridMonth"
-        height="80vh"
-        headerToolbar={{
-          left: "prev,next today",
-          center: "title",
-          right: "dayGridMonth,timeGridWeek,timeGridDay",
-        }}
-        events={events}
-        eventClick={handleEventClick}
-        dayMaxEventRows={3}
-        eventContent={(arg) => {
-          const count =
-            (arg.event as any).submissionCount ??
-            (arg.event.extendedProps as any)?.response_times?.length ??
-            1;
-          const latest = (arg.event as any).latestTimeStr || "";
-          return {
-            html: `
-              <div class="${styles.fcChip}">
-                <div class="${styles.fcTitle}">${arg.event.title}</div>
-                <div class="${styles.fcMeta}">
-                  ${count} ${count === 1 ? "submission" : "submissions"}${
-              latest ? ` · latest ${latest}` : ""
+    <div
+      className={
+        styles.root
+      }
+    >
+      <div
+        className={
+          styles.calendarHeader
+        }
+      >
+        <div>
+          <h3
+            className={
+              styles.heading
             }
-                </div>
-              </div>
-            `,
-          };
-        }}
-        dayCellContent={(arg) => {
-          const dateStr = arg.date.toISOString().split("T")[0];
-          const dayNotes = notes[dateStr] || {};
-          const noteEntries = Object.entries(dayNotes);
+          >
+            Response calendar
+          </h3>
 
-          return (
-            <div className={styles.dayCellContent}>
-              <div className={styles.dayNumber}>{arg.dayNumberText}</div>
+          <p
+            className={
+              styles.description
+            }
+          >
+            Responses are grouped
+            by participant,
+            module, and actual
+            submission day.
+            Click an empty area
+            of a date to add a
+            researcher note.
+          </p>
+        </div>
 
-              <button
-                className={styles.addNoteButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedDate(dateStr);
-                  setNoteModalOpen(true);
-                }}
-              >
-                + Note
-              </button>
+        {rangeLabel && (
+          <span
+            className={
+              styles.rangeLabel
+            }
+          >
+            {rangeLabel}
+          </span>
+        )}
+      </div>
 
-              {noteEntries.length > 0 && (
-                <div className={styles.note}>
-                  {noteEntries.map(([userKey, noteText]) => (
-                    <div
-                      key={userKey}
-                      className={styles.noteEntry}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedViewerNote({ user: userKey, note: noteText });
-                        setSelectedDate(dateStr);
-                        setViewerModalOpen(true);
-                      }}
-                      title={noteText}
-                    >
-                      <span>Note for {userKey}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+      <div
+        className={
+          styles.calendarStatus
+        }
+      >
+        {loading ? (
+          <span>
+            Loading responses
+            for this period…
+          </span>
+        ) : (
+          <span>
+            {rows.length}{" "}
+            {rows.length ===
+            1
+              ? "response record"
+              : "response records"}{" "}
+            in the visible period
+          </span>
+        )}
+
+        <span
+          className={
+            styles.statusSeparator
+          }
+          aria-hidden="true"
+        >
+          ·
+        </span>
+
+        {notesLoading ? (
+          <span>
+            Loading notes…
+          </span>
+        ) : (
+          <span>
+            {notes.length}{" "}
+            {notes.length ===
+            1
+              ? "note"
+              : "notes"}
+          </span>
+        )}
+      </div>
+
+      {noteError &&
+        !addNoteOpen &&
+        !viewerOpen && (
+          <div
+            className={
+              styles.noteError
+            }
+            role="alert"
+          >
+            {noteError}
+          </div>
+        )}
+
+      <div
+        className={
+          styles.calendar
+        }
+      >
+        <FullCalendar
+          ref={
+            calendarRef
+          }
+          plugins={[
+            dayGridPlugin,
+            timeGridPlugin,
+            interactionPlugin,
+          ]}
+          initialView="dayGridMonth"
+          headerToolbar={{
+            left:
+              "prev,next today",
+
+            center:
+              "title",
+
+            right:
+              "dayGridMonth,timeGridWeek,timeGridDay",
+          }}
+          datesSet={
+            handleDatesSet
+          }
+          dateClick={
+            handleDateClick
+          }
+          events={
+            events
+          }
+          eventClick={
+            handleEventClick
+          }
+          eventContent={
+            renderEventContent
+          }
+          dayMaxEvents={
+            4
+          }
+          moreLinkClick="popover"
+          fixedWeekCount={
+            false
+          }
+          height="auto"
+          eventDisplay="block"
+        />
+      </div>
+
+      <div
+        className={
+          styles.calendarFooter
+        }
+      >
+        <p
+          className={
+            styles.calendarHint
+          }
+        >
+          Responses are placed
+          according to when they
+          were submitted. If a
+          participant completes a
+          prompt scheduled for an
+          earlier day, the calendar
+          marks it as an earlier
+          prompt. Week and day
+          views use recorded
+          submission times.
+          Researcher notes remain
+          date-level annotations
+          in the all-day area.
+        </p>
+
+        {mapping && (
+          <p
+            className={
+              styles.mappingHint
+            }
+          >
+            Participant labels
+            use{" "}
+            <strong>
+              {mappingName}
+            </strong>{" "}
+            where available,
+            with the internal
+            user ID as fallback.
+          </p>
+        )}
+      </div>
+
+      <EventDetail
+        isOpen={
+          detailOpen
+        }
+        onClose={() =>
+          setDetailOpen(
+            false,
+          )
+        }
+        eventData={
+          detailData
+        }
+      />
+
+      <NoteModal
+        isOpen={
+          addNoteOpen
+        }
+        selectedDate={
+          selectedDate
+        }
+        participants={
+          participants
+        }
+        saving={
+          savingNote
+        }
+        error={
+          addNoteOpen
+            ? noteError
+            : null
+        }
+        onClose={() => {
+          if (
+            savingNote
+          ) {
+            return;
+          }
+
+          setAddNoteOpen(
+            false,
+          );
+
+          setNoteError(
+            null,
           );
         }}
+        onSave={
+          saveNewNote
+        }
       />
 
-      {/* legend chip when mapping is active */}
-      {mapping && (
-        <div className="mt-2 text-xs text-gray-600">
-          Coloring &amp; titles use <span className="font-medium">{mappingName}</span> when available; otherwise <code>user_id</code>.
-        </div>
-      )}
-
-      {/* Event details modal */}
-      <EventDetail
-        isOpen={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        eventData={detailData}
-      />
-
-      {/* Add note modal */}
-      <NoteModal
-        isOpen={noteModalOpen}
-        onClose={() => setNoteModalOpen(false)}
-        onSave={(user: string, note: string) => {
-          if (selectedDate) {
-            addNote(user, selectedDate, note);
-            setNoteModalOpen(false);
-          }
-        }}
-        users={allUsers}
-        selectedDate={selectedDate}
-      />
-
-      {/* View/delete note modal */}
       <NoteViewerModal
-        isOpen={viewerModalOpen}
-        onClose={() => setViewerModalOpen(false)}
-        user={selectedViewerNote?.user || ""}
-        note={selectedViewerNote?.note || ""}
-        date={selectedDate || ""}
-        onDelete={() => {
-          if (selectedDate && selectedViewerNote?.user) {
-            deleteNote(selectedViewerNote.user, selectedDate);
-            setViewerModalOpen(false);
+        isOpen={
+          viewerOpen
+        }
+        note={
+          selectedNote
+        }
+        participantLabel={
+          selectedNoteParticipantLabel
+        }
+        saving={
+          updatingNote
+        }
+        deleting={
+          deletingNote
+        }
+        error={
+          viewerOpen
+            ? noteError
+            : null
+        }
+        onClose={() => {
+          if (
+            updatingNote ||
+            deletingNote
+          ) {
+            return;
           }
+
+          setViewerOpen(
+            false,
+          );
+
+          setSelectedNote(
+            null,
+          );
+
+          setNoteError(
+            null,
+          );
         }}
+        onSave={
+          saveExistingNote
+        }
+        onDelete={
+          removeNote
+        }
       />
     </div>
   );

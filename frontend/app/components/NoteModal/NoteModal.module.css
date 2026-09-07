@@ -1,81 +1,424 @@
-/* Full viewport overlay with semi-transparent background */
 .overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: rgba(0, 0, 0, 0.4);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-  }
-  
-  /* Modal content box */
-  .modal {
-    position: relative; /* Ensures that the close button is positioned relative to this container */
-    background-color: #fff;
-    padding: 1.5rem;
-    border-radius: 10px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-    width: 90%;
-    max-width: 400px;
-    z-index: 10000;
- }
-  
-  /* Close button styling: "x" placed in the top-right corner of the modal block */
-  .closeButton {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: none;
-    border: none;
-    font-size: 1.2rem;
-    cursor: pointer;
-    color: #333;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 1.5rem;
+
+  background: rgba(20, 20, 20, 0.38);
+}
+
+.modal {
+  position: relative;
+
+  width: min(100%, 480px);
+  max-height: min(760px, calc(100vh - 3rem));
+
+  overflow-y: auto;
+
+  padding: 1.4rem;
+
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+
+  background: var(--surface);
+
+  box-shadow:
+    0 16px 42px
+    rgba(0, 0, 0, 0.16);
+}
+
+.closeButton {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 2rem;
+  height: 2rem;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: var(--radius-sm);
+
+  background: transparent;
+
+  color: var(--text-muted);
+
+  cursor: pointer;
+
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.closeButton:hover {
+  background: var(--surface-subtle);
+
+  color: var(--text-primary);
+}
+
+.closeButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.modalHeader {
+  padding-right: 2.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.25rem;
+
+  color: var(--text-muted);
+
+  font-size: 0.68rem;
+  font-weight: 700;
+
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+
+  color: var(--text-primary);
+
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+
+.subtitle {
+  margin: 0.25rem 0 0;
+
+  color: var(--text-muted);
+
+  font-size: 0.8rem;
+}
+
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+
+  min-width: 0;
+
+  margin: 0 0 1.1rem;
+  padding: 0;
+
+  border: 0;
+}
+
+.radioOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+
+  padding: 0.65rem 0.7rem;
+
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+
+  cursor: pointer;
+}
+
+.radioOption:has(input:checked) {
+  border-color: var(--accent-border);
+
+  background: var(--accent-subtle);
+}
+
+.radioOption input {
+  margin-top: 0.2rem;
+}
+
+.radioOption span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.radioOption strong {
+  color: var(--text-primary);
+
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.radioOption small {
+  color: var(--text-muted);
+
+  font-size: 0.73rem;
+}
+
+.field {
+  margin-top: 1rem;
+}
+
+.label {
+  display: block;
+
+  margin-bottom: 0.35rem;
+
+  color: var(--text-secondary);
+
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.select,
+.textarea {
+  width: 100%;
+
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+
+  background: var(--surface);
+
+  color: var(--text-primary);
+
+  font: inherit;
+  font-size: 0.82rem;
+
+  outline: none;
+
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.select {
+  min-height: 2.45rem;
+
+  padding: 0.4rem 0.55rem;
+}
+
+.textarea {
+  min-height: 120px;
+
+  padding: 0.65rem;
+
+  resize: vertical;
+
+  line-height: 1.5;
+}
+
+.select:focus,
+.textarea:focus {
+  border-color: var(--accent);
+
+  box-shadow:
+    0 0 0 2px
+    var(--accent-subtle);
+}
+
+.characterCount {
+  margin-top: 0.25rem;
+
+  color: var(--text-subtle);
+
+  font-size: 0.68rem;
+
+  text-align: right;
+}
+
+.error {
+  margin-top: 1rem;
+
+  padding: 0.65rem 0.75rem;
+
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+
+  background: var(--danger-subtle);
+
+  color: var(--danger);
+
+  font-size: 0.76rem;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+
+  margin-top: 1.25rem;
+}
+
+.actionsBetween {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+
+  margin-top: 1.25rem;
+}
+
+.actionsBetween .actions {
+  margin-top: 0;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton {
+  min-height: 2.2rem;
+
+  padding: 0.45rem 0.75rem;
+
+  border-radius: var(--radius-sm);
+
+  cursor: pointer;
+
+  font-size: 0.76rem;
+  font-weight: 600;
+
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.primaryButton {
+  border: 1px solid var(--accent);
+
+  background: var(--accent);
+
+  color: #fff;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--accent-hover);
+
+  border-color: var(--accent-hover);
+}
+
+.secondaryButton {
+  border: 1px solid var(--border-strong);
+
+  background: transparent;
+
+  color: var(--text-secondary);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: var(--surface-subtle);
+
+  color: var(--text-primary);
+}
+
+.dangerButton {
+  border: 1px solid var(--danger-border);
+
+  background: transparent;
+
+  color: var(--danger);
+}
+
+.dangerButton:hover:not(:disabled) {
+  background: var(--danger-subtle);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.dangerButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.noteMetadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1rem;
+
+  margin: 0 0 1.25rem;
+  padding: 0.85rem;
+
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+
+  background: var(--surface-subtle);
+}
+
+.noteMetadata div {
+  min-width: 0;
+}
+
+.noteMetadata dt {
+  margin-bottom: 0.15rem;
+
+  color: var(--text-muted);
+
+  font-size: 0.66rem;
+  font-weight: 600;
+
+  text-transform: uppercase;
+}
+
+.noteMetadata dd {
+  margin: 0;
+
+  overflow-wrap: anywhere;
+
+  color: var(--text-primary);
+
+  font-size: 0.78rem;
+}
+
+.noteText {
+  min-height: 5rem;
+
+  padding: 0.8rem;
+
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+
+  background: var(--surface);
+
+  color: var(--text-primary);
+
+  font-size: 0.84rem;
+  line-height: 1.55;
+
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.permissionHint {
+  margin: 0.6rem 0 0;
+
+  color: var(--text-muted);
+
+  font-size: 0.7rem;
+}
+
+@media (max-width: 520px) {
+  .overlay {
+    padding: 0.75rem;
   }
 
-  .closeButton:hover {
-    background-color: transparent;
+  .modal {
+    padding: 1.1rem;
   }
-  
-  /* Label styling for form fields */
-  .label {
-    display: block;
-    margin-top: 1rem;
-    font-weight: 600;
+
+  .noteMetadata {
+    grid-template-columns: 1fr;
   }
-  
-  /* Shared styling for select dropdowns and textareas */
-  .select,
-  .textarea {
+
+  .actionsBetween {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .actionsBetween .actions {
     width: 100%;
-    padding: 0.5rem;
-    margin-top: 0.25rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-size: 0.9rem;
   }
-  
-  /* Additional styling for the textarea */
-  .textarea {
-    min-height: 80px;
-    resize: vertical;
-  }
-  
-  /* Save button styling */
-  .saveButton {
-    margin-top: 1rem;
-    /* background-color: #2f80ed; */
-    color: white;
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: background-color 0.2s ease-in-out
-  }
-  .saveButton:hover {
-    /* background-color: #276dd8; */
-  }
+}

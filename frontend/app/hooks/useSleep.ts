@@ -1,159 +1,618 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { fetchLabeledResponses, LabeledSurveyResponseOut } from "@/app/lib/responses";
-import { RoleKey, SleepRow } from "../lib/types";
-import { toDate, toInt } from "../lib/vizUtils";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-type Opts = { userIds?: string[]; from?: string; to?: string };
+import {
+  fetchLabeledResponses,
+} from "../lib/responses";
 
-const minsBetween = (start: Date, end: Date) => {
-  let dt = (end.getTime() - start.getTime()) / 60000;
-  if (dt < 0) dt += 24 * 60;
-  return Math.round(dt);
+import type {
+  LabeledSurveyResponseOut,
+} from "../types/schemas";
+
+import type {
+  InferredStudyQuestion,
+  RoleKey,
+  SleepRow,
+} from "../lib/types";
+
+import {
+  toDate,
+  toInt,
+} from "../lib/vizUtils";
+
+type SleepRoles = Partial<
+  Record<
+    RoleKey,
+    InferredStudyQuestion
+  >
+>;
+
+type UseSleepOptions = {
+  studyId: string;
+  roles?: SleepRoles;
+  userIds?: string[];
+  from?: string;
+  to?: string;
 };
 
-const addMinutes = (d: Date, mins: number) => new Date(d.getTime() + mins * 60_000);
+function minutesBetween(
+  start: Date,
+  end: Date,
+): number {
+  let difference =
+    (
+      end.getTime() -
+      start.getTime()
+    ) /
+    60000;
 
-const dayKeyFromResponseTime = (iso: string) => {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const da = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${da}`;
-};
+  if (difference < 0) {
+    difference +=
+      24 * 60;
+  }
 
-const toQid = (k: string) => (k ? k.split(":")[1] : "");
+  return Math.round(
+    difference,
+  );
+}
 
-export function useSleep(studyId: string, roles: Record<RoleKey, string>, opts: Opts) {
-  const [loading, setLoading] = useState(false);
-  const [docs, setDocs] = useState<LabeledSurveyResponseOut[]>([]);
+function addMinutes(
+  value: Date,
+  minutes: number,
+): Date {
+  return new Date(
+    value.getTime() +
+      minutes * 60000,
+  );
+}
 
-  const chosenModules = useMemo(() => {
-    const s = new Set<string>();
-    for (const k of Object.values(roles)) {
-      if (!k) continue;
-      const [mid] = k.split(":");
-      if (mid) s.add(mid);
-    }
-    return Array.from(s);
-  }, [roles]);
+function dayKeyFromResponseTime(
+  iso: string,
+): string {
+  const value =
+    new Date(iso);
 
-  const canQuery = chosenModules.length > 0 && !!roles.trySleepTime && !!roles.outOfBedTime;
+  const year =
+    value.getFullYear();
 
-  const load = async () => {
+  const month =
+    String(
+      value.getMonth() + 1,
+    ).padStart(
+      2,
+      "0",
+    );
+
+  const day =
+    String(
+      value.getDate(),
+    ).padStart(
+      2,
+      "0",
+    );
+
+  return `${year}-${month}-${day}`;
+}
+
+function answerForQuestion(
+  response:
+    LabeledSurveyResponseOut,
+  question:
+    InferredStudyQuestion |
+    undefined,
+): unknown {
+  if (!question) {
+    return undefined;
+  }
+
+  const answers =
+    response.responses ?? {};
+
+  return answers[
+    question.question_id
+  ];
+}
+
+export function useSleep({
+  studyId,
+  roles,
+  userIds,
+  from,
+  to,
+}: UseSleepOptions) {
+  const safeRoles =
+    roles ?? {};
+
+  const [
+    docs,
+    setDocs,
+  ] =
+    useState<
+      LabeledSurveyResponseOut[]
+    >([]);
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const requestIdRef =
+    useRef(0);
+
+  const chosenModules =
+    useMemo(() => {
+      const modules =
+        new Set<string>();
+
+      for (
+        const question
+        of Object.values(
+          safeRoles,
+        )
+      ) {
+        if (
+          question?.module_id
+        ) {
+          modules.add(
+            question.module_id,
+          );
+        }
+      }
+
+      return Array.from(
+        modules,
+      );
+    }, [
+      safeRoles,
+    ]);
+
+  const canQuery =
+    Boolean(
+      safeRoles.trySleepTime,
+    ) &&
+    Boolean(
+      safeRoles.outOfBedTime,
+    ) &&
+    chosenModules.length >
+      0;
+
+  useEffect(() => {
+    const requestId =
+      ++requestIdRef.current;
+
     if (!canQuery) {
       setDocs([]);
+      setLoading(false);
+      setError(null);
+
       return;
     }
 
-    setLoading(true);
-    try {
-      const res = await fetchLabeledResponses(studyId, {
-        user_id: opts.userIds && opts.userIds.length ? opts.userIds : undefined,
-        module_id: chosenModules,
-        from: opts.from || undefined,
-        to: opts.to || undefined,
-        sort: "desc",
-        limit: 5000,
-      });
-      setDocs(res);
-    } finally {
+    if (
+      userIds !==
+        undefined &&
+      userIds.length === 0
+    ) {
+      setDocs([]);
       setLoading(false);
+      setError(null);
+
+      return;
     }
-  };
 
-  const normalized: SleepRow[] = useMemo(() => {
-    if (!docs.length) return [];
+    const load =
+      async () => {
+        setLoading(true);
+        setError(null);
 
-    const tryQ = toQid(roles.trySleepTime);
-    const outQ = toQid(roles.outOfBedTime);
-    const latQ = toQid(roles.sleepLatencyMin);
-    const finalAwQ = toQid(roles.finalAwakeningTime);
-    const wakesCountQ = toQid(roles.awakeningsCount);
-    const wakesDurQ = toQid(roles.awakeningsDurationMin);
-    const napMinQ = toQid(roles.napMinutes);
-    const napCountQ = toQid(roles.napCount);
+        try {
+          const response =
+            await fetchLabeledResponses(
+              studyId,
+              {
+                user_id:
+                  userIds,
 
-    const bucket = new Map<string, SleepRow>();
+                module_id:
+                  chosenModules,
 
-    for (const r of docs) {
-      const ans = r.responses || {};
-      const day = dayKeyFromResponseTime(r.response_time);
-      const key = `${r.user_id}|${day}`;
+                from:
+                  from ||
+                  undefined,
 
-      if (!bucket.has(key)) {
-        bucket.set(key, {
-          user_id: r.user_id,
-          date: day,
+                to:
+                  to ||
+                  undefined,
 
-          trySleepTime: null,
-          outOfBedTime: null,
-          sleepLatencyMin: null,
-          finalAwakeningTime: null,
+                sort:
+                  "asc",
 
-          awakeningsCount: null,
-          awakeningsDurationMin: null,
+                skip:
+                  0,
 
-          napMinutes: null,
-          napCount: null,
+                limit:
+                  50000,
+              },
+            );
 
-          sleepOnsetTime: null,
-          sleepDurationMin: null,
-          sleepDurationInclNapsMin: null,
-        });
+          if (
+            requestId !==
+            requestIdRef.current
+          ) {
+            return;
+          }
+
+          setDocs(
+            response,
+          );
+        } catch (
+          caughtError:
+            unknown
+        ) {
+          if (
+            requestId !==
+            requestIdRef.current
+          ) {
+            return;
+          }
+
+          setDocs([]);
+
+          setError(
+            caughtError instanceof
+              Error
+              ? caughtError.message
+              : "Failed to load sleep data.",
+          );
+        } finally {
+          if (
+            requestId ===
+            requestIdRef.current
+          ) {
+            setLoading(false);
+          }
+        }
+      };
+
+    void load();
+  }, [
+    canQuery,
+    studyId,
+    userIds,
+    from,
+    to,
+    chosenModules,
+  ]);
+
+  const rows:
+    SleepRow[] =
+    useMemo(() => {
+      if (
+        docs.length === 0
+      ) {
+        return [];
       }
 
-      const row = bucket.get(key)!;
+      const bucket =
+        new Map<
+          string,
+          SleepRow
+        >();
 
-      const trySleepTime = tryQ ? toDate(ans[tryQ]) : null;
-      const outOfBedTime = outQ ? toDate(ans[outQ]) : null;
-      const sleepLatencyMin = latQ ? toInt(ans[latQ]) : null;
-      const finalAwakeningTime = finalAwQ ? toDate(ans[finalAwQ]) : null;
+      for (
+        const response
+        of docs
+      ) {
+        const day =
+          dayKeyFromResponseTime(
+            response.response_time,
+          );
 
-      const awakeningsCount = wakesCountQ ? toInt(ans[wakesCountQ]) : null;
-      const awakeningsDurationMin = wakesDurQ ? toInt(ans[wakesDurQ]) : null;
+        const key =
+          `${response.user_id}|${day}`;
 
-      const napMinutes = napMinQ ? toInt(ans[napMinQ]) : null;
-      const napCount = napCountQ ? toInt(ans[napCountQ]) : null;
+        if (
+          !bucket.has(
+            key,
+          )
+        ) {
+          bucket.set(
+            key,
+            {
+              user_id:
+                response.user_id,
 
-      if (trySleepTime && !row.trySleepTime) row.trySleepTime = trySleepTime;
-      if (outOfBedTime && !row.outOfBedTime) row.outOfBedTime = outOfBedTime;
-      if (sleepLatencyMin != null && row.sleepLatencyMin == null) row.sleepLatencyMin = sleepLatencyMin;
-      if (finalAwakeningTime && !row.finalAwakeningTime) row.finalAwakeningTime = finalAwakeningTime;
+              date:
+                day,
 
-      if (awakeningsCount != null && row.awakeningsCount == null) row.awakeningsCount = awakeningsCount;
-      if (awakeningsDurationMin != null && row.awakeningsDurationMin == null) row.awakeningsDurationMin = awakeningsDurationMin;
+              trySleepTime:
+                null,
 
-      if (napMinutes != null && row.napMinutes == null) row.napMinutes = napMinutes;
-      if (napCount != null && row.napCount == null) row.napCount = napCount;
-    }
+              outOfBedTime:
+                null,
 
-    for (const row of bucket.values()) {
-      const end = row.finalAwakeningTime ?? row.outOfBedTime;
-      if (!row.trySleepTime || !end) continue;
+              sleepLatencyMin:
+                null,
 
-      const onset =
-        row.sleepLatencyMin != null
-          ? addMinutes(row.trySleepTime, Math.max(0, row.sleepLatencyMin))
-          : row.trySleepTime;
+              finalAwakeningTime:
+                null,
 
-      row.sleepOnsetTime = onset;
+              awakeningsCount:
+                null,
 
-      const totalFromOnset = minsBetween(onset, end);
-      const awakeMins = Math.max(0, row.awakeningsDurationMin ?? 0);
-      const sleepMins = Math.max(0, totalFromOnset - awakeMins);
+              awakeningsDurationMin:
+                null,
 
-      row.sleepDurationMin = sleepMins;
+              napMinutes:
+                null,
 
-      const naps = Math.max(0, row.napMinutes ?? 0);
-      row.sleepDurationInclNapsMin = sleepMins + naps;
-    }
+              napCount:
+                null,
 
-    return Array.from(bucket.values()).sort((a, b) =>
-      a.user_id === b.user_id ? a.date.localeCompare(b.date) : a.user_id.localeCompare(b.user_id)
-    );
-  }, [docs, roles]);
+              sleepOnsetTime:
+                null,
 
-  return { canQuery, chosenModules, loading, load, normalized };
+              sleepDurationMin:
+                null,
+
+              sleepDurationInclNapsMin:
+                null,
+            },
+          );
+        }
+
+        const row =
+          bucket.get(
+            key,
+          )!;
+
+        const trySleepTime =
+          toDate(
+            answerForQuestion(
+              response,
+              safeRoles.trySleepTime,
+            ),
+          );
+
+        const outOfBedTime =
+          toDate(
+            answerForQuestion(
+              response,
+              safeRoles.outOfBedTime,
+            ),
+          );
+
+        const sleepLatencyMin =
+          toInt(
+            answerForQuestion(
+              response,
+              safeRoles.sleepLatencyMin,
+            ),
+          );
+
+        const finalAwakeningTime =
+          toDate(
+            answerForQuestion(
+              response,
+              safeRoles.finalAwakeningTime,
+            ),
+          );
+
+        const awakeningsCount =
+          toInt(
+            answerForQuestion(
+              response,
+              safeRoles.awakeningsCount,
+            ),
+          );
+
+        const awakeningsDurationMin =
+          toInt(
+            answerForQuestion(
+              response,
+              safeRoles.awakeningsDurationMin,
+            ),
+          );
+
+        const napMinutes =
+          toInt(
+            answerForQuestion(
+              response,
+              safeRoles.napMinutes,
+            ),
+          );
+
+        const napCount =
+          toInt(
+            answerForQuestion(
+              response,
+              safeRoles.napCount,
+            ),
+          );
+
+        if (
+          trySleepTime &&
+          !row.trySleepTime
+        ) {
+          row.trySleepTime =
+            trySleepTime;
+        }
+
+        if (
+          outOfBedTime &&
+          !row.outOfBedTime
+        ) {
+          row.outOfBedTime =
+            outOfBedTime;
+        }
+
+        if (
+          sleepLatencyMin !==
+            null &&
+          row.sleepLatencyMin ===
+            null
+        ) {
+          row.sleepLatencyMin =
+            sleepLatencyMin;
+        }
+
+        if (
+          finalAwakeningTime &&
+          !row.finalAwakeningTime
+        ) {
+          row.finalAwakeningTime =
+            finalAwakeningTime;
+        }
+
+        if (
+          awakeningsCount !==
+            null &&
+          row.awakeningsCount ===
+            null
+        ) {
+          row.awakeningsCount =
+            awakeningsCount;
+        }
+
+        if (
+          awakeningsDurationMin !==
+            null &&
+          row.awakeningsDurationMin ===
+            null
+        ) {
+          row.awakeningsDurationMin =
+            awakeningsDurationMin;
+        }
+
+        if (
+          napMinutes !==
+            null &&
+          row.napMinutes ===
+            null
+        ) {
+          row.napMinutes =
+            napMinutes;
+        }
+
+        if (
+          napCount !==
+            null &&
+          row.napCount ===
+            null
+        ) {
+          row.napCount =
+            napCount;
+        }
+      }
+
+      for (
+        const row
+        of bucket.values()
+      ) {
+        if (
+          !row.trySleepTime ||
+          !row.outOfBedTime
+        ) {
+          continue;
+        }
+
+        const latency =
+          Math.max(
+            0,
+            row.sleepLatencyMin ??
+              0,
+          );
+
+        const onset =
+          addMinutes(
+            row.trySleepTime,
+            latency,
+          );
+
+        row.sleepOnsetTime =
+          onset;
+
+        const sleepEnd =
+          row.finalAwakeningTime ??
+          row.outOfBedTime;
+
+        const sleepPeriod =
+          minutesBetween(
+            onset,
+            sleepEnd,
+          );
+
+        const awakeMinutes =
+          Math.max(
+            0,
+            row.awakeningsDurationMin ??
+              0,
+          );
+
+        const sleepMinutes =
+          Math.max(
+            0,
+            sleepPeriod -
+              awakeMinutes,
+          );
+
+        row.sleepDurationMin =
+          sleepMinutes;
+
+        row.sleepDurationInclNapsMin =
+          sleepMinutes +
+          Math.max(
+            0,
+            row.napMinutes ??
+              0,
+          );
+      }
+
+      return Array.from(
+        bucket.values(),
+      ).sort(
+        (
+          a,
+          b,
+        ) => {
+          if (
+            a.user_id ===
+            b.user_id
+          ) {
+            return a.date.localeCompare(
+              b.date,
+            );
+          }
+
+          return a.user_id.localeCompare(
+            b.user_id,
+          );
+        },
+      );
+    }, [
+      docs,
+      safeRoles,
+    ]);
+
+  return {
+    rows,
+    loading,
+    error,
+    canQuery,
+  };
 }

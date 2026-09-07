@@ -1,191 +1,478 @@
 "use client";
 
-import { useMemo } from "react";
-import { SleepRow } from "../../lib/types";
-import { median } from "../../lib/vizUtils";
+import {
+  useMemo,
+} from "react";
+
+import {
+  SleepRow,
+} from "../../lib/types"
+
+import {
+  average,
+  clockMinutes,
+  formatClockMinutes,
+  formatDuration,
+  median,
+} from "../../lib/vizUtils"
+
 import styles from "./SleepVizPanel.module.css";
 
-export function SleepStats({
+export default function SleepStats({
   data,
   mapping,
-  mappingName = "Mapped ID",
 }: {
-  data: SleepRow[];
-  mapping?: Record<string, string>;
+  data:
+    SleepRow[];
+
+  mapping?: Record<
+    string,
+    string
+  >;
+
   mappingName?: string;
 }) {
-  const displayId = (uid: string) => mapping?.[uid] ?? uid;
+  const byUser =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          SleepRow[]
+        >();
 
-  const byUser = useMemo(() => {
-    const m = new Map<string, SleepRow[]>();
-    for (const r of data) {
-      if (!m.has(r.user_id)) m.set(r.user_id, []);
-      m.get(r.user_id)!.push(r);
-    }
-    for (const [, arr] of m) arr.sort((a, b) => a.date.localeCompare(b.date));
-    return Array.from(m.entries());
-  }, [data]);
+      for (
+        const row
+        of data
+      ) {
+        if (
+          !map.has(
+            row.user_id,
+          )
+        ) {
+          map.set(
+            row.user_id,
+            [],
+          );
+        }
 
-  const timeToMins = (d: Date) => d.getHours() * 60 + d.getMinutes();
-  const addMinutes = (d: Date, mins: number) => new Date(d.getTime() + mins * 60_000);
+        map
+          .get(
+            row.user_id,
+          )!
+          .push(
+            row,
+          );
+      }
 
-  const diffMinutes = (start: Date, end: Date) => {
-    let dt = (end.getTime() - start.getTime()) / 60000;
-    if (dt < 0) dt += 24 * 60;
-    return Math.round(dt);
-  };
+      for (
+        const rows
+        of map.values()
+      ) {
+        rows.sort(
+          (
+            a,
+            b,
+          ) =>
+            a.date.localeCompare(
+              b.date,
+            ),
+        );
+      }
 
-  const fmtHM = (mins: number) => `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
-
-  const fmtClock = (mins: number | null) => {
-    if (mins == null) return "—";
-    const m = (mins + 1440) % 1440;
-    return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-  };
-
-  const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
+      return Array.from(
+        map.entries(),
+      );
+    }, [
+      data,
+    ]);
 
   return (
-    <div className={styles.statsGrid}>
-      {byUser.map(([user, rows]) => {
-        const pretty = displayId(user);
-        const showRaw = pretty !== user;
-
-        const trySleepTimes = rows
-          .map((r) => (r.trySleepTime ? timeToMins(r.trySleepTime) : null))
-          .filter((x): x is number => x != null);
-
-        const onsetTimes = rows
-          .map((r) => {
-            if (r.trySleepTime && r.sleepLatencyMin != null) {
-              return timeToMins(addMinutes(r.trySleepTime, r.sleepLatencyMin));
+    <div
+      className={
+        styles.statsSection
+      }
+    >
+      <div
+        className={
+          styles.sectionHeadingRow
+        }
+      >
+        <div>
+          <h5
+            className={
+              styles.chartTitle
             }
-            return null;
-          })
-          .filter((x): x is number => x != null);
+          >
+            Participant summaries
+          </h5>
 
-        const endTimes = rows
-          .map((r) => {
-            const end = r.finalAwakeningTime ?? r.outOfBedTime ?? null;
-            return end ? timeToMins(end) : null;
-          })
-          .filter((x): x is number => x != null);
+          <p
+            className={
+              styles.chartDescription
+            }
+          >
+            Descriptive summaries
+            derived from available
+            diary responses.
+          </p>
+        </div>
+      </div>
 
-        const medTry = median(trySleepTimes);
-        const medOnset = median(onsetTimes);
-        const medEnd = median(endTimes);
+      <div
+        className={
+          styles.statsGrid
+        }
+      >
+        {byUser.map(
+          ([
+            userId,
+            rows,
+          ]) => {
+            const displayId =
+              mapping?.[
+                userId
+              ] ??
+              userId;
 
-        const sleepPeriods = rows
-          .map((r) => {
-            const onset =
-              r.trySleepTime && r.sleepLatencyMin != null
-                ? addMinutes(r.trySleepTime, r.sleepLatencyMin)
-                : null;
-            const end = r.finalAwakeningTime ?? r.outOfBedTime ?? null;
-            if (!onset || !end) return null;
-            return diffMinutes(onset, end);
-          })
-          .filter((x): x is number => x != null);
+            const showRaw =
+              displayId !==
+              userId;
 
-        const tstMinutes = rows
-          .map((r) => {
-            const onset =
-              r.trySleepTime && r.sleepLatencyMin != null
-                ? addMinutes(r.trySleepTime, r.sleepLatencyMin)
-                : null;
-            const end = r.finalAwakeningTime ?? r.outOfBedTime ?? null;
-            if (!onset || !end) return null;
+            const tryTimes =
+              rows
+                .map(
+                  (row) =>
+                    row.trySleepTime
+                      ? clockMinutes(
+                          row.trySleepTime,
+                        )
+                      : null,
+                )
+                .filter(
+                  (
+                    value,
+                  ): value is number =>
+                    value !==
+                    null,
+                );
 
-            const sleepPeriod = diffMinutes(onset, end);
-            const waso = r.awakeningsDurationMin ?? null;
-            if (waso == null) return sleepPeriod;
+            const onsetTimes =
+              rows
+                .map(
+                  (row) =>
+                    row.sleepOnsetTime
+                      ? clockMinutes(
+                          row.sleepOnsetTime,
+                        )
+                      : null,
+                )
+                .filter(
+                  (
+                    value,
+                  ): value is number =>
+                    value !==
+                    null,
+                );
 
-            return Math.max(0, sleepPeriod - waso);
-          })
-          .filter((x): x is number => x != null);
+            const endTimes =
+              rows
+                .map(
+                  (row) => {
+                    const end =
+                      row.finalAwakeningTime ??
+                      row.outOfBedTime;
 
-        const inclNapsMinutes = rows
-          .map((r) => {
-            const onset =
-              r.trySleepTime && r.sleepLatencyMin != null
-                ? addMinutes(r.trySleepTime, r.sleepLatencyMin)
-                : null;
-            const end = r.finalAwakeningTime ?? r.outOfBedTime ?? null;
-            if (!onset || !end) return null;
+                    return end
+                      ? clockMinutes(
+                          end,
+                        )
+                      : null;
+                  },
+                )
+                .filter(
+                  (
+                    value,
+                  ): value is number =>
+                    value !==
+                    null,
+                );
 
-            const sleepPeriod = diffMinutes(onset, end);
-            const waso = r.awakeningsDurationMin ?? null;
-            const core = waso == null ? sleepPeriod : Math.max(0, sleepPeriod - waso);
+            const sleepDurations =
+              rows
+                .map(
+                  (row) =>
+                    row.sleepDurationMin,
+                )
+                .filter(
+                  (
+                    value,
+                  ): value is number =>
+                    value !==
+                    null,
+                );
 
-            const naps = r.napMinutes ?? null;
-            return naps == null ? core : core + naps;
-          })
-          .filter((x): x is number => x != null);
+            const sleepIncludingNaps =
+              rows
+                .map(
+                  (row) =>
+                    row.sleepDurationInclNapsMin,
+                )
+                .filter(
+                  (
+                    value,
+                  ): value is number =>
+                    value !==
+                    null,
+                );
 
-        const wasoList = rows
-          .map((r) => r.awakeningsDurationMin ?? null)
-          .filter((x): x is number => x != null);
+            const latency =
+              rows
+                .map(
+                  (row) =>
+                    row.sleepLatencyMin,
+                )
+                .filter(
+                  (
+                    value,
+                  ): value is number =>
+                    value !==
+                    null,
+                );
 
-        const napMinList = rows
-          .map((r) => r.napMinutes ?? null)
-          .filter((x): x is number => x != null);
+            const awakeMinutes =
+              rows
+                .map(
+                  (row) =>
+                    row.awakeningsDurationMin,
+                )
+                .filter(
+                  (
+                    value,
+                  ): value is number =>
+                    value !==
+                    null,
+                );
 
-        const napCountList = rows
-          .map((r) => r.napCount ?? null)
-          .filter((x): x is number => x != null);
+            const napMinutes =
+              rows
+                .map(
+                  (row) =>
+                    row.napMinutes,
+                )
+                .filter(
+                  (
+                    value,
+                  ): value is number =>
+                    value !==
+                    null,
+                );
 
-        const avgSleepPeriod = avg(sleepPeriods);
-        const avgTst = avg(tstMinutes);
-        const avgInclNaps = avg(inclNapsMinutes);
-        const avgWaso = avg(wasoList);
-        const avgNapMin = avg(napMinList);
-        const avgNapCount = avg(napCountList);
+            const avgSleep =
+              average(
+                sleepDurations,
+              );
 
-        return (
-          <div key={user} className={styles.statCard}>
-            <div className={styles.statTitle}>
-              {pretty} {showRaw && <span className={styles.rawGray}>({user})</span>}
-            </div>
+            const avgSleepInclNaps =
+              average(
+                sleepIncludingNaps,
+              );
 
-            <div className={styles.statBody}>
-              <div>
-                Avg sleep period:{" "}
-                <span className={styles.statStrong}>{avgSleepPeriod != null ? fmtHM(avgSleepPeriod) : "—"}</span>
+            const avgLatency =
+              average(
+                latency,
+              );
+
+            const avgAwake =
+              average(
+                awakeMinutes,
+              );
+
+            const avgNap =
+              average(
+                napMinutes,
+              );
+
+            return (
+              <div
+                key={
+                  userId
+                }
+                className={
+                  styles.statBlock
+                }
+              >
+                <div
+                  className={
+                    styles.statHeader
+                  }
+                >
+                  <strong
+                    className={
+                      styles.statParticipant
+                    }
+                  >
+                    {
+                      displayId
+                    }
+                  </strong>
+
+                  {showRaw && (
+                    <span
+                      className={
+                        styles.statRaw
+                      }
+                    >
+                      {
+                        userId
+                      }
+                    </span>
+                  )}
+                </div>
+
+                <dl
+                  className={
+                    styles.statList
+                  }
+                >
+                  <div>
+                    <dt>
+                      Diary days
+                    </dt>
+
+                    <dd>
+                      {
+                        rows.length
+                      }
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>
+                      Avg sleep
+                    </dt>
+
+                    <dd>
+                      {avgSleep !==
+                      null
+                        ? formatDuration(
+                            avgSleep,
+                          )
+                        : "—"}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>
+                      Avg sleep incl.
+                      naps
+                    </dt>
+
+                    <dd>
+                      {avgSleepInclNaps !==
+                      null
+                        ? formatDuration(
+                            avgSleepInclNaps,
+                          )
+                        : "—"}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>
+                      Median try to
+                      sleep
+                    </dt>
+
+                    <dd>
+                      {formatClockMinutes(
+                        median(
+                          tryTimes,
+                        ),
+                      )}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>
+                      Median sleep
+                      onset
+                    </dt>
+
+                    <dd>
+                      {formatClockMinutes(
+                        median(
+                          onsetTimes,
+                        ),
+                      )}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>
+                      Median end
+                    </dt>
+
+                    <dd>
+                      {formatClockMinutes(
+                        median(
+                          endTimes,
+                        ),
+                      )}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>
+                      Avg latency
+                    </dt>
+
+                    <dd>
+                      {avgLatency !==
+                      null
+                        ? `${Math.round(
+                            avgLatency,
+                          )} min`
+                        : "—"}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>
+                      Avg awake
+                      minutes
+                    </dt>
+
+                    <dd>
+                      {avgAwake !==
+                      null
+                        ? `${Math.round(
+                            avgAwake,
+                          )} min`
+                        : "—"}
+                    </dd>
+                  </div>
+
+                  <div>
+                    <dt>
+                      Avg nap
+                      minutes
+                    </dt>
+
+                    <dd>
+                      {avgNap !==
+                      null
+                        ? `${Math.round(
+                            avgNap,
+                          )} min`
+                        : "—"}
+                    </dd>
+                  </div>
+                </dl>
               </div>
-              <div>
-                Avg sleep (TST):{" "}
-                <span className={styles.statStrong}>{avgTst != null ? fmtHM(avgTst) : "—"}</span>
-                {avgWaso != null && <span className={styles.rawGray}> (WASO avg {avgWaso}m)</span>}
-              </div>
-              <div>
-                Avg sleep incl. naps:{" "}
-                <span className={styles.statStrong}>{avgInclNaps != null ? fmtHM(avgInclNaps) : "—"}</span>
-                {(avgNapMin != null || avgNapCount != null) && (
-                  <span className={styles.rawGray}>
-                    {" "}
-                    (naps avg {avgNapMin != null ? `${avgNapMin}m` : "—"}
-                    {avgNapCount != null ? `, n=${avgNapCount}` : ""})
-                  </span>
-                )}
-              </div>
-
-              <div>
-                Median try-to-sleep: <span className={styles.statStrong}>{fmtClock(medTry)}</span>
-              </div>
-              <div>
-                Median sleep onset: <span className={styles.statStrong}>{fmtClock(medOnset)}</span>
-              </div>
-              <div>
-                Median end: <span className={styles.statStrong}>{fmtClock(medEnd)}</span>
-              </div>
-
-              <div>
-                Days: <span className={styles.statStrong}>{rows.length}</span>
-              </div>
-            </div>
-          </div>
-        );
-      })}
+            );
+          },
+        )}
+      </div>
     </div>
   );
 }

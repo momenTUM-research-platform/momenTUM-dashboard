@@ -1,105 +1,261 @@
-// frontend/app/lib/adherence.ts
-
 export type OccurrenceOut = {
   module_id: string;
   module_name: string;
   date: string;
-  start: string; // ISO with tz
-  end: string; // ISO with tz
+  start: string;
+  end: string;
 };
 
 export type ModuleMeta = {
   module_id: string;
   module_name: string;
-  repeat: string; // "daily" | "never" | ""
+  repeat: string;
   sticky: boolean;
 };
 
 export type StructureCountOut = {
   study_days: number;
-  per_module: Record<string, number>;
-  per_module_meta: Record<string, ModuleMeta>;
+
+  per_module: Record<
+    string,
+    number
+  >;
+
+  per_module_meta: Record<
+    string,
+    ModuleMeta
+  >;
+
   total: number;
+
+  max_offset_days: number;
+
+  schedule_span_days: number;
 };
 
 export function safeTZ(): string {
   try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    return (
+      Intl.DateTimeFormat()
+        .resolvedOptions()
+        .timeZone ||
+      "UTC"
+    );
   } catch {
     return "UTC";
   }
 }
 
-export function toYMD(d: Date): string {
-  const y = d.getFullYear();
-  const m = `${d.getMonth() + 1}`.padStart(2, "0");
-  const day = `${d.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${day}`;
+export function toYMD(
+  date: Date,
+): string {
+  const year =
+    date.getFullYear();
+
+  const month =
+    String(
+      date.getMonth() + 1,
+    ).padStart(
+      2,
+      "0",
+    );
+
+  const day =
+    String(
+      date.getDate(),
+    ).padStart(
+      2,
+      "0",
+    );
+
+  return `${year}-${month}-${day}`;
 }
 
-const BASE = "/api/v2/adherence";
+const BASE =
+  "/api/v2/adherence";
 
-function getTokenFromStorage(): string | undefined {
-  if (typeof window === "undefined") return undefined;
-  const t = window.localStorage.getItem("token") ?? undefined;
-  return t && t.trim().length > 0 ? t : undefined;
-}
-
-function authHeader(token?: string): Record<string, string> {
-  const t = token ?? getTokenFromStorage();
-  return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
-export async function fetchAdherenceExpected(params: {
-  studyId: string;
-  from: string; // YYYY-MM-DD
-  to: string; // YYYY-MM-DD
-  tz: string;
-  userId?: string;
-  token?: string;
-}): Promise<OccurrenceOut[]> {
-  const qs = new URLSearchParams({
-    study_id: params.studyId,
-    from: params.from,
-    to: params.to,
-    tz: params.tz,
-  });
-  if (params.userId) qs.set("user_id", params.userId);
-
-  const res = await fetch(`${BASE}/expected?${qs.toString()}`, {
-    headers: {
-      Accept: "application/json",
-      ...authHeader(params.token),
-    },
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`expected: ${res.status} ${res.statusText} ${text}`);
+function getTokenFromStorage():
+  | string
+  | undefined {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+    return undefined;
   }
 
-  return res.json();
+  const token =
+    window.localStorage.getItem(
+      "token",
+    ) ?? undefined;
+
+  if (
+    !token ||
+    token.trim().length ===
+      0
+  ) {
+    return undefined;
+  }
+
+  return token;
+}
+
+function authHeader(
+  token?: string,
+): Record<
+  string,
+  string
+> {
+  const resolvedToken =
+    token ??
+    getTokenFromStorage();
+
+  if (!resolvedToken) {
+    return {};
+  }
+
+  return {
+    Authorization:
+      `Bearer ${resolvedToken}`,
+  };
+}
+
+async function readErrorBody(
+  response: Response,
+): Promise<string> {
+  try {
+    return await response.text();
+  } catch {
+    return "";
+  }
+}
+
+export async function fetchAdherenceExpected(
+  params: {
+    studyId: string;
+    from: string;
+    to: string;
+    tz: string;
+    userId?: string;
+    token?: string;
+  },
+): Promise<
+  OccurrenceOut[]
+> {
+  const query =
+    new URLSearchParams({
+      study_id:
+        params.studyId,
+
+      from:
+        params.from,
+
+      to:
+        params.to,
+
+      tz:
+        params.tz,
+    });
+
+  if (
+    params.userId
+  ) {
+    query.set(
+      "user_id",
+      params.userId,
+    );
+  }
+
+  const response =
+    await fetch(
+      `${BASE}/expected?${query.toString()}`,
+      {
+        headers: {
+          Accept:
+            "application/json",
+
+          ...authHeader(
+            params.token,
+          ),
+        },
+
+        cache:
+          "no-store",
+      },
+    );
+
+  if (
+    !response.ok
+  ) {
+    const body =
+      await readErrorBody(
+        response,
+      );
+
+    throw new Error(
+      [
+        "Failed to load expected adherence schedule",
+        `(${response.status} ${response.statusText})`,
+        body,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+
+  return response.json();
 }
 
 export async function fetchAdherenceStructureCount(
   studyId: string,
-  opts?: { token?: string }
-): Promise<StructureCountOut> {
-  const qs = new URLSearchParams({ study_id: studyId });
+  options?: {
+    token?: string;
+  },
+): Promise<
+  StructureCountOut
+> {
+  const query =
+    new URLSearchParams({
+      study_id:
+        studyId,
+    });
 
-  const res = await fetch(`${BASE}/structure-count?${qs.toString()}`, {
-    headers: {
-      Accept: "application/json",
-      ...authHeader(opts?.token),
-    },
-    cache: "no-store",
-  });
+  const response =
+    await fetch(
+      `${BASE}/structure-count?${query.toString()}`,
+      {
+        headers: {
+          Accept:
+            "application/json",
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`structure-count: ${res.status} ${res.statusText} ${text}`);
+          ...authHeader(
+            options?.token,
+          ),
+        },
+
+        cache:
+          "no-store",
+      },
+    );
+
+  if (
+    !response.ok
+  ) {
+    const body =
+      await readErrorBody(
+        response,
+      );
+
+    throw new Error(
+      [
+        "Failed to load adherence structure",
+        `(${response.status} ${response.statusText})`,
+        body,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
   }
 
-  return res.json();
+  return response.json();
 }

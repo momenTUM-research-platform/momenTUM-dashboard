@@ -1,218 +1,741 @@
-// components/SleepVizPanel/SleepVizPanel.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  useStudyQuestions,
+} from "../../hooks/useStudyQuestions";
+
+import {
+  useSleep,
+} from "../../hooks/useSleep";
+
+import {
+  InferredStudyQuestion,
+  RoleKey,
+} from "../../lib/types";
+
+import {
+  isSchemaNumeric,
+  isTime,
+} from "../../lib/vizUtils";
+
+import RoleSelect from "./RoleSelect";
+import SleepRibbon from "./SleepRibbon";
+import SleepStats from "./SleepStats";
+
 import styles from "./SleepVizPanel.module.css";
-import { useStudyQuestions } from "../../hooks/useStudyQuestions";
-import { useSleep } from "../../hooks/useSleep";
-import { InferredStudyQuestion, RoleKey } from "../../lib/types";
-import { isSchemaNumeric, isTime } from "../../lib/vizUtils";
-import { RoleSelect } from "./RoleSelect";
-import { SleepRibbon } from "./SleepRibbon";
-import { SleepStats } from "./SleepStats";
 
 type Props = {
   studyId: string;
   userIds?: string[];
+  moduleIds?: string[];
   from?: string;
   to?: string;
   mapping?: Record<string, string>;
   mappingName?: string;
 };
 
-type PersistedState = {
-  activeTab?: "sleep" | "variables";
-  roles?: Record<RoleKey, string>;
-  selectedVars?: string[];
-};
+type RoleAssignments = Partial<
+  Record<RoleKey, string>
+>;
 
-const defaultRoles: Record<RoleKey, string> = {
-  trySleepTime: "",
-  outOfBedTime: "",
-  sleepLatencyMin: "",
-  finalAwakeningTime: "",
-  awakeningsCount: "",
-  awakeningsDurationMin: "",
-  napMinutes: "",
-  napCount: "",
-};
+const STORAGE_PREFIX = "sleepviz:";
 
-function readPersisted(key: string): { roles: Record<RoleKey, string> } | null {
-  try {
-    const raw = sessionStorage.getItem(key);
-    if (!raw) return null;
+const REQUIRED_ROLES: Array<{
+  role: RoleKey;
+  label: string;
+  description: string;
+  predicate: (
+    question: InferredStudyQuestion,
+  ) => boolean;
+}> = [
+  {
+    role: "trySleepTime",
+    label: "Try to sleep",
+    description:
+      "Time the participant tried to fall asleep.",
+    predicate: isTime,
+  },
+  {
+    role: "outOfBedTime",
+    label: "Out of bed",
+    description:
+      "Time the participant got out of bed.",
+    predicate: isTime,
+  },
+];
 
-    const parsed = JSON.parse(raw) as PersistedState;
-    if (!parsed || typeof parsed !== "object") return null;
+const OPTIONAL_ROLES: Array<{
+  role: RoleKey;
+  label: string;
+  description: string;
+  predicate: (
+    question: InferredStudyQuestion,
+  ) => boolean;
+}> = [
+  {
+    role: "sleepLatencyMin",
+    label: "Sleep latency",
+    description:
+      "Minutes between trying to sleep and falling asleep.",
+    predicate: isSchemaNumeric,
+  },
+  {
+    role: "finalAwakeningTime",
+    label: "Final awakening",
+    description:
+      "Time of final awakening before getting out of bed.",
+    predicate: isTime,
+  },
+  {
+    role: "awakeningsCount",
+    label: "Number of awakenings",
+    description:
+      "Number of awakenings during the sleep period.",
+    predicate: isSchemaNumeric,
+  },
+  {
+    role: "awakeningsDurationMin",
+    label: "Awake during night",
+    description:
+      "Total minutes awake during the sleep period.",
+    predicate: isSchemaNumeric,
+  },
+  {
+    role: "napMinutes",
+    label: "Nap duration",
+    description:
+      "Total nap duration in minutes.",
+    predicate: isSchemaNumeric,
+  },
+  {
+    role: "napCount",
+    label: "Number of naps",
+    description:
+      "Number of naps during the day.",
+    predicate: isSchemaNumeric,
+  },
+];
 
-    const roles = { ...defaultRoles, ...(parsed.roles ?? {}) } as Record<RoleKey, string>;
-    return { roles };
-  } catch {
-    return null;
-  }
-}
-
-function writePersisted(key: string, roles: Record<RoleKey, string>) {
-  try {
-    const state: PersistedState = { activeTab: "sleep", roles, selectedVars: [] };
-    sessionStorage.setItem(key, JSON.stringify(state));
-  } catch {}
+function questionKey(
+  question: InferredStudyQuestion,
+) {
+  return `${question.module_id}:${question.question_id}`;
 }
 
 export default function SleepVizPanel({
   studyId,
   userIds,
+  moduleIds,
   from,
   to,
   mapping,
-  mappingName = "Mapped ID",
+  mappingName,
 }: Props) {
-  const persistKey = `sleepviz:${studyId}`;
-
-  const { questions, loading: loadingQ } = useStudyQuestions(studyId);
-
-  const [roles, setRoles] = useState<Record<RoleKey, string>>(defaultRoles);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    const saved = readPersisted(persistKey);
-    if (saved) setRoles(saved.roles);
-    setHydrated(true);
-  }, [persistKey]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    writePersisted(persistKey, roles);
-  }, [persistKey, roles, hydrated]);
-
-  const { canQuery: canSleep, loading: loadingSleep, load: loadSleep, normalized } = useSleep(
+  const {
+    questions,
+    loading: questionsLoading,
+    error: questionsError,
+  } = useStudyQuestions(
     studyId,
-    roles,
-    { userIds, from, to }
   );
 
-  const grouped = useMemo(() => {
-    if (!questions) {
-      return [] as Array<{ module_id: string; module_name: string; items: InferredStudyQuestion[] }>;
-    }
+  const [
+    roles,
+    setRoles,
+  ] =
+    useState<RoleAssignments>(
+      {},
+    );
 
-    const by = new Map<string, { module_id: string; module_name: string; items: InferredStudyQuestion[] }>();
+  const [
+    generatedRoles,
+    setGeneratedRoles,
+  ] =
+    useState<RoleAssignments | null>(
+      null,
+    );
 
-    for (const q of questions) {
-      if (!by.has(q.module_id)) {
-        by.set(q.module_id, { module_id: q.module_id, module_name: q.module_name, items: [] });
+  const allowedQuestions =
+    useMemo(() => {
+      if (!questions) {
+        return [];
       }
-      by.get(q.module_id)!.items.push(q);
+
+      if (
+        !moduleIds?.length
+      ) {
+        return questions;
+      }
+
+      const allowed =
+        new Set(
+          moduleIds,
+        );
+
+      return questions.filter(
+        (question) =>
+          allowed.has(
+            question.module_id,
+          ),
+      );
+    }, [
+      questions,
+      moduleIds,
+    ]);
+
+  useEffect(() => {
+    const raw =
+      sessionStorage.getItem(
+        `${STORAGE_PREFIX}${studyId}`,
+      );
+
+    if (!raw) {
+      return;
     }
 
-    const list = Array.from(by.values());
-    list.sort((a, b) => (a.module_name || a.module_id).localeCompare(b.module_name || b.module_id));
-    list.forEach((g) => g.items.sort((a, b) => (a.question_text || "").localeCompare(b.question_text || "")));
-    return list;
-  }, [questions]);
+    try {
+      const parsed =
+        JSON.parse(
+          raw,
+        ) as RoleAssignments;
+
+      setRoles(
+        parsed,
+      );
+    } catch {
+      sessionStorage.removeItem(
+        `${STORAGE_PREFIX}${studyId}`,
+      );
+    }
+  }, [
+    studyId,
+  ]);
+
+  useEffect(() => {
+    if (
+      !allowedQuestions.length
+    ) {
+      return;
+    }
+
+    const validIds =
+      new Set(
+        allowedQuestions.map(
+          questionKey,
+        ),
+      );
+
+    setRoles(
+      (current) => {
+        let changed =
+          false;
+
+        const next = {
+          ...current,
+        };
+
+        for (
+          const role
+          of Object.keys(
+            next,
+          ) as RoleKey[]
+        ) {
+          const selected =
+            next[
+              role
+            ];
+
+          if (
+            selected &&
+            !validIds.has(
+              selected,
+            )
+          ) {
+            delete next[
+              role
+            ];
+
+            changed =
+              true;
+          }
+        }
+
+        return changed
+          ? next
+          : current;
+      },
+    );
+  }, [
+    allowedQuestions,
+  ]);
+
+  useEffect(() => {
+    sessionStorage.setItem(
+      `${STORAGE_PREFIX}${studyId}`,
+      JSON.stringify(
+        roles,
+      ),
+    );
+  }, [
+    studyId,
+    roles,
+  ]);
+
+  const roleQuestionMap =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          InferredStudyQuestion
+        >();
+
+      for (
+        const question
+        of allowedQuestions
+      ) {
+        map.set(
+          questionKey(
+            question,
+          ),
+          question,
+        );
+      }
+
+      return map;
+    }, [
+      allowedQuestions,
+    ]);
+
+  const selectedRoleQuestions =
+    useMemo(() => {
+      const result: Partial<
+        Record<
+          RoleKey,
+          InferredStudyQuestion
+        >
+      > = {};
+
+      for (
+        const [
+          role,
+          key,
+        ]
+        of Object.entries(
+          generatedRoles ??
+            {},
+        ) as Array<
+          [
+            RoleKey,
+            string,
+          ]
+        >
+      ) {
+        const question =
+          roleQuestionMap.get(
+            key,
+          );
+
+        if (
+          question
+        ) {
+          result[
+            role
+          ] =
+            question;
+        }
+      }
+
+      return result;
+    }, [
+      generatedRoles,
+      roleQuestionMap,
+    ]);
+
+  const canGenerate =
+    Boolean(
+      roles.trySleepTime,
+    ) &&
+    Boolean(
+      roles.outOfBedTime,
+    );
+
+  const {
+    rows,
+    loading:
+      sleepLoading,
+    error:
+      sleepError,
+  } = useSleep({
+    studyId,
+    userIds,
+    from,
+    to,
+    roles:
+      selectedRoleQuestions,
+  });
+
+  function updateRole(
+    role: RoleKey,
+    value: string,
+  ) {
+    setRoles(
+      (current) => {
+        const next = {
+          ...current,
+        };
+
+        if (value) {
+          next[
+            role
+          ] =
+            value;
+        } else {
+          delete next[
+            role
+          ];
+        }
+
+        return next;
+      },
+    );
+
+    setGeneratedRoles(
+      null,
+    );
+  }
+
+  function generateAnalysis() {
+    if (
+      !canGenerate
+    ) {
+      return;
+    }
+
+    setGeneratedRoles({
+      ...roles,
+    });
+  }
+
+  if (
+    questionsLoading
+  ) {
+    return (
+      <div
+        className={
+          styles.state
+        }
+      >
+        Loading study
+        questions…
+      </div>
+    );
+  }
+
+  if (
+    questionsError
+  ) {
+    return (
+      <div
+        className={
+          styles.errorState
+        }
+      >
+        {
+          questionsError
+        }
+      </div>
+    );
+  }
+
+  if (
+    !questions ||
+    questions.length ===
+      0
+  ) {
+    return (
+      <div
+        className={
+          styles.state
+        }
+      >
+        No study questions
+        are available for
+        visualization.
+      </div>
+    );
+  }
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.tabs}>
-        <button className={`${styles.tab} ${styles.tabActive}`} type="button">
-          Sleep
-        </button>
+    <div
+      className={
+        styles.panel
+      }
+    >
+      <div
+        className={
+          styles.intro
+        }
+      >
+        <h2
+          className={
+            styles.title
+          }
+        >
+          Sleep analysis
+        </h2>
+
+        <p
+          className={
+            styles.description
+          }
+        >
+          Map study questions
+          to sleep variables
+          to explore sleep
+          timing and derived
+          sleep measures.
+        </p>
       </div>
 
-      <div className={styles.roles}>
-        <RoleSelect
-          title="Try to sleep (time)"
-          value={roles.trySleepTime}
-          setValue={(v) => setRoles((s) => ({ ...s, trySleepTime: v }))}
-          groups={grouped}
-          filter={isTime}
-          placeholder="Select try-to-sleep question"
-        />
+      <div
+        className={
+          styles.mappingSection
+        }
+      >
+        <div
+          className={
+            styles.sectionHeader
+          }
+        >
+          <div>
+            <h3
+              className={
+                styles.sectionTitle
+              }
+            >
+              Variable mapping
+            </h3>
 
-        <RoleSelect
-          title="Out of bed (time)"
-          value={roles.outOfBedTime}
-          setValue={(v) => setRoles((s) => ({ ...s, outOfBedTime: v }))}
-          groups={grouped}
-          filter={isTime}
-          placeholder="Select out-of-bed question"
-        />
+            <p
+              className={
+                styles.sectionDescription
+              }
+            >
+              Select the study
+              questions that
+              correspond to each
+              sleep variable.
+            </p>
+          </div>
+        </div>
 
-        <RoleSelect
-          title="Sleep latency (min)"
-          value={roles.sleepLatencyMin}
-          setValue={(v) => setRoles((s) => ({ ...s, sleepLatencyMin: v }))}
-          groups={grouped}
-          filter={isSchemaNumeric}
-          placeholder="Select sleep latency (minutes)"
-          optional
-        />
+        <div
+          className={
+            styles.roleGrid
+          }
+        >
+          {REQUIRED_ROLES.map(
+            ({
+              role,
+              label,
+              description,
+              predicate,
+            }) => (
+              <RoleSelect
+                key={
+                  role
+                }
+                label={
+                  label
+                }
+                description={
+                  description
+                }
+                questions={
+                  allowedQuestions.filter(
+                    predicate,
+                  )
+                }
+                value={
+                  roles[
+                    role
+                  ] ??
+                  ""
+                }
+                onChange={(
+                  value,
+                ) =>
+                  updateRole(
+                    role,
+                    value,
+                  )
+                }
+                required
+              />
+            ),
+          )}
 
-        <RoleSelect
-          title="Final awakening (time)"
-          value={roles.finalAwakeningTime}
-          setValue={(v) => setRoles((s) => ({ ...s, finalAwakeningTime: v }))}
-          groups={grouped}
-          filter={isTime}
-          placeholder="Select final awakening time"
-          optional
-        />
+          {OPTIONAL_ROLES.map(
+            ({
+              role,
+              label,
+              description,
+              predicate,
+            }) => (
+              <RoleSelect
+                key={
+                  role
+                }
+                label={
+                  label
+                }
+                description={
+                  description
+                }
+                questions={
+                  allowedQuestions.filter(
+                    predicate,
+                  )
+                }
+                value={
+                  roles[
+                    role
+                  ] ??
+                  ""
+                }
+                onChange={(
+                  value,
+                ) =>
+                  updateRole(
+                    role,
+                    value,
+                  )
+                }
+                optional
+              />
+            ),
+          )}
+        </div>
 
-        <RoleSelect
-          title="Awakenings count"
-          value={roles.awakeningsCount}
-          setValue={(v) => setRoles((s) => ({ ...s, awakeningsCount: v }))}
-          groups={grouped}
-          filter={isSchemaNumeric}
-          placeholder="Select awakenings count"
-          optional
-        />
-
-        <RoleSelect
-          title="Awake minutes (WASO)"
-          value={roles.awakeningsDurationMin}
-          setValue={(v) => setRoles((s) => ({ ...s, awakeningsDurationMin: v }))}
-          groups={grouped}
-          filter={isSchemaNumeric}
-          placeholder="Select total awake minutes"
-          optional
-        />
-
-        <RoleSelect
-          title="Nap minutes"
-          value={roles.napMinutes}
-          setValue={(v) => setRoles((s) => ({ ...s, napMinutes: v }))}
-          groups={grouped}
-          filter={isSchemaNumeric}
-          placeholder="Select total nap minutes"
-          optional
-        />
-
-        <RoleSelect
-          title="Nap count"
-          value={roles.napCount}
-          setValue={(v) => setRoles((s) => ({ ...s, napCount: v }))}
-          groups={grouped}
-          filter={isSchemaNumeric}
-          placeholder="Select nap count"
-          optional
-        />
-
-        <div className={styles.actions}>
-          <button className={styles.btn} disabled={!canSleep || loadingQ || loadingSleep} onClick={loadSleep}>
-            {loadingSleep ? "Loading…" : "Load"}
+        <div
+          className={
+            styles.mappingActions
+          }
+        >
+          <button
+            type="button"
+            className={
+              styles.primaryButton
+            }
+            disabled={
+              !canGenerate
+            }
+            onClick={
+              generateAnalysis
+            }
+          >
+            Generate analysis
           </button>
+
+          {!canGenerate && (
+            <span
+              className={
+                styles.mappingHint
+              }
+            >
+              Try-to-sleep and
+              out-of-bed questions
+              are required.
+            </span>
+          )}
         </div>
       </div>
 
-      {mapping && (
-        <div className={styles.legend}>
-          Using <strong>{mappingName}</strong> where available; falling back to <code>user_id</code>.
+      {generatedRoles && (
+        <div
+          className={
+            styles.resultsSection
+          }
+        >
+          {sleepLoading && (
+            <div
+              className={
+                styles.state
+              }
+            >
+              Loading sleep
+              responses…
+            </div>
+          )}
+
+          {sleepError && (
+            <div
+              className={
+                styles.errorState
+              }
+            >
+              {
+                sleepError
+              }
+            </div>
+          )}
+
+          {!sleepLoading &&
+            !sleepError &&
+            rows.length ===
+              0 && (
+              <div
+                className={
+                  styles.state
+                }
+              >
+                No matching sleep
+                responses were
+                found for the
+                selected mapping
+                and filters.
+              </div>
+            )}
+
+          {!sleepLoading &&
+            !sleepError &&
+            rows.length >
+              0 && (
+              <>
+                <SleepRibbon
+                  data={
+                    rows
+                  }
+                  mapping={
+                    mapping
+                  }
+                  mappingName={
+                    mappingName
+                  }
+                />
+
+                <SleepStats
+                  data={
+                    rows
+                  }
+                  mapping={
+                    mapping
+                  }
+                  mappingName={
+                    mappingName
+                  }
+                />
+
+              </>
+            )}
         </div>
       )}
-
-      <SleepRibbon data={normalized} mapping={mapping} mappingName={mappingName} />
-      <SleepStats data={normalized} mapping={mapping} mappingName={mappingName} />
     </div>
   );
 }
