@@ -24,6 +24,7 @@ import {
   fetchLabeledResponses,
   fetchStudyQuestions,
   fetchUserMapping,
+  ResponsePlatform,
   StudyQuestion,
 } from "@/app/lib/responses";
 
@@ -326,6 +327,26 @@ function formatCollapsedDate(
   ).format(date);
 }
 
+function formatPlatform(
+  value: ResponsePlatform,
+): string {
+  if (
+    value ===
+    "android"
+  ) {
+    return "Android";
+  }
+
+  if (
+    value ===
+    "iphone"
+  ) {
+    return "iPhone";
+  }
+
+  return "Unknown / other";
+}
+
 export default function StudyResultsViewV2({
   studyId,
 }: Props) {
@@ -410,6 +431,14 @@ export default function StudyResultsViewV2({
     setModuleIds,
   ] =
     useState<string[]>([]);
+
+  const [
+    platform,
+    setPlatform,
+  ] =
+    useState<
+      ResponsePlatform | ""
+    >("");
 
   const [
     from,
@@ -836,15 +865,33 @@ export default function StudyResultsViewV2({
         : "Mapped ID"
     );
 
+  const responsePlatformView =
+    activeView ===
+      "calendar" ||
+    activeView ===
+      "table";
+
   const activeFilterCount =
     userIds.length +
     mappedIds.length +
     moduleIds.length +
+    (
+      platform &&
+      responsePlatformView
+        ? 1
+        : 0
+    ) +
     (from ? 1 : 0) +
     (to ? 1 : 0);
 
   const additionalFilterCount =
     moduleIds.length +
+    (
+      platform &&
+      responsePlatformView
+        ? 1
+        : 0
+    ) +
     (from ? 1 : 0) +
     (to ? 1 : 0);
 
@@ -855,6 +902,12 @@ export default function StudyResultsViewV2({
     exportScope ===
       "current" &&
     hasImpossibleUserFilter;
+
+  const effectivePlatform =
+    responsePlatformView &&
+    platform
+      ? platform
+      : undefined;
 
   async function loadStandardRows(
     pageArg = page,
@@ -895,6 +948,11 @@ export default function StudyResultsViewV2({
               0
                 ? moduleIds
                 : undefined,
+
+            platform:
+              isEventsView
+                ? undefined
+                : effectivePlatform,
 
             from:
               from ||
@@ -1030,6 +1088,9 @@ export default function StudyResultsViewV2({
               0
                 ? moduleIds
                 : undefined,
+
+            platform:
+              effectivePlatform,
 
             from:
               effectiveFrom,
@@ -1345,6 +1406,9 @@ export default function StudyResultsViewV2({
                 ? moduleIds
                 : undefined,
 
+            platform:
+              effectivePlatform,
+
             from:
               from ||
               undefined,
@@ -1444,6 +1508,10 @@ export default function StudyResultsViewV2({
                 ? moduleIds
                 : undefined,
 
+            platform:
+              platform ||
+              undefined,
+
             from:
               from ||
               undefined,
@@ -1485,6 +1553,10 @@ export default function StudyResultsViewV2({
 
     setPage(
       1,
+    );
+
+    setPlatform(
+      "",
     );
 
     setCalendarRange(
@@ -1619,6 +1691,7 @@ export default function StudyResultsViewV2({
     from,
     to,
     activeView,
+    platform,
     hasImpossibleUserFilter,
   ]);
 
@@ -1670,6 +1743,7 @@ export default function StudyResultsViewV2({
     JSON.stringify(
       moduleIds,
     ),
+    platform,
     from,
     to,
     hasImpossibleUserFilter,
@@ -1755,6 +1829,7 @@ export default function StudyResultsViewV2({
       setUserIds([]);
       setMappedIds([]);
       setModuleIds([]);
+      setPlatform("");
       setFrom("");
       setTo("");
       setExportError(
@@ -2022,8 +2097,9 @@ export default function StudyResultsViewV2({
             >
               Select participants
               and optionally narrow
-              the results by module
-              or time range.
+              the results by module,
+              response platform, or
+              time range.
             </p>
           </div>
 
@@ -2162,8 +2238,9 @@ export default function StudyResultsViewV2({
                         </strong>
 
                         <span>
-                          {hasActiveFilters
-                            ? "Use the participant, module, and date filters currently applied."
+                          {hasActiveFilters ||
+                          platform
+                            ? "Use the participant, module, response-platform, and date filters currently applied."
                             : "No filters are currently applied, so this includes all responses."}
                         </span>
                       </span>
@@ -2339,7 +2416,10 @@ export default function StudyResultsViewV2({
               disabled={
                 loading ||
                 facetsLoading ||
-                !hasActiveFilters
+                (
+                  !hasActiveFilters &&
+                  !platform
+                )
               }
             >
               Clear filters
@@ -2902,6 +2982,15 @@ export default function StudyResultsViewV2({
                   </span>
                 )}
 
+                {platform &&
+                  responsePlatformView && (
+                  <span>
+                    {formatPlatform(
+                      platform,
+                    )}
+                  </span>
+                )}
+
                 {from && (
                   <span>
                     From{" "}
@@ -3071,6 +3160,85 @@ export default function StudyResultsViewV2({
               </div>
             </div>
 
+            {responsePlatformView && (
+              <div
+                className={
+                  styles.field
+                }
+              >
+                <label
+                  className={
+                    styles.fieldLabel
+                  }
+                  htmlFor="platform-filter"
+                >
+                  Response platform
+                </label>
+
+                <select
+                  id="platform-filter"
+                  className={
+                    styles.input
+                  }
+                  value={
+                    platform
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setPlatform(
+                      event.target
+                        .value as
+                        | ResponsePlatform
+                        | "",
+                    )
+                  }
+                >
+                  <option value="">
+                    All platforms
+                    {facets?.platforms
+                      ? ` (${facets.platforms.all})`
+                      : ""}
+                  </option>
+
+                  <option value="android">
+                    Android
+                    {facets?.platforms
+                      ? ` (${facets.platforms.android})`
+                      : ""}
+                  </option>
+
+                  <option value="iphone">
+                    iPhone
+                    {facets?.platforms
+                      ? ` (${facets.platforms.iphone})`
+                      : ""}
+                  </option>
+
+                  <option value="unknown">
+                    Unknown / other
+                    {facets?.platforms
+                      ? ` (${facets.platforms.unknown})`
+                      : ""}
+                  </option>
+                </select>
+
+                <div
+                  className={
+                    styles.fieldStatus
+                  }
+                >
+                  Platform is recorded
+                  on each submitted
+                  response. Older
+                  responses without a
+                  known platform are
+                  grouped under
+                  Unknown / other.
+                </div>
+              </div>
+            )}
+
             <div
               className={
                 styles.dateField
@@ -3168,19 +3336,19 @@ export default function StudyResultsViewV2({
         {activeView ===
         "calendar" ? (
           <CalendarViewV2
-          studyId={
-            studyId
-          }
-          rows={
-            rows ?? []
-          }
-          questions={
-            questions ??
-            []
-          }
-          loading={
-            loading
-          }
+            studyId={
+              studyId
+            }
+            rows={
+              rows ?? []
+            }
+            questions={
+              questions ??
+              []
+            }
+            loading={
+              loading
+            }
             initialDate={
               calendarRange
                 ?.focusDate ??

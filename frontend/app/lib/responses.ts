@@ -47,6 +47,11 @@ export type MappingMode =
   | "latest"
   | "earliest";
 
+export type ResponsePlatform =
+  | "android"
+  | "ios"
+  | "unknown";
+
 /**
  * Key: internal application user_id
  * Value: researcher-facing participant identifier
@@ -59,6 +64,7 @@ export type ResponseFilterOptions = {
 
   user_id?: string[];
   module_id?: string[];
+  platform?: ResponsePlatform;
 
   from?: string;
   to?: string;
@@ -109,6 +115,13 @@ function appendResponseFilters(
         value,
       ),
   );
+
+  if (opts.platform) {
+    params.append(
+      "platform",
+      opts.platform,
+    );
+  }
 
   if (opts.from) {
     params.append(
@@ -546,6 +559,13 @@ export type Facets = {
     id: string;
     name: string;
   }>;
+
+  platforms: {
+    all: number;
+    android: number;
+    ios: number;
+    unknown: number;
+  };
 };
 
 export async function fetchFacets(

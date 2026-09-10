@@ -592,6 +592,7 @@ def _build_response_query(
     module_id: Optional[
         List[str]
     ],
+    platform: Optional[str],
     from_: Optional[str],
     to: Optional[str],
 ) -> Dict[
@@ -629,6 +630,23 @@ def _build_response_query(
             "$in":
                 modules
         }
+
+    if (
+        platform
+        == "unknown"
+    ):
+        query[
+            "platform"
+        ] = {
+            "$nin": [
+                "android",
+                "iphone",
+            ]
+        }
+    elif platform:
+        query[
+            "platform"
+        ] = platform
 
     if (
         from_
@@ -897,6 +915,7 @@ def _build_responses_csv(
     module_id: Optional[
         List[str]
     ],
+    platform: Optional[str],
     from_: Optional[str],
     to: Optional[str],
     match: List[str],
@@ -913,6 +932,9 @@ def _build_responses_csv(
 
             module_id=
                 module_id,
+
+            platform=
+                platform,
 
             from_=
                 from_,
@@ -1321,6 +1343,9 @@ def list_response_facets(
             module_id=
                 module_id,
 
+            platform=
+                None,
+
             from_=
                 from_,
 
@@ -1383,12 +1408,72 @@ def list_response_facets(
         )
     )
 
+    all_count = (
+        responses_col.count_documents(
+            query
+        )
+    )
+
+    android_query = {
+        **query,
+        "platform":
+            "android",
+    }
+
+    iphone_query = {
+        **query,
+        "platform":
+            "iphone",
+    }
+
+    unknown_query = {
+        **query,
+        "platform": {
+            "$nin": [
+                "android",
+                "iphone",
+            ]
+        },
+    }
+
+    android_count = (
+        responses_col.count_documents(
+            android_query
+        )
+    )
+
+    iphone_count = (
+        responses_col.count_documents(
+            iphone_query
+        )
+    )
+
+    unknown_count = (
+        responses_col.count_documents(
+            unknown_query
+        )
+    )
+
     return {
         "users":
             users_out,
 
         "modules":
             modules_out,
+
+        "platforms": {
+            "all":
+                all_count,
+
+            "android":
+                android_count,
+
+            "iphone":
+                iphone_count,
+
+            "unknown":
+                unknown_count,
+        },
     }
 
 
@@ -1420,6 +1505,18 @@ def list_study_responses_labeled(
         description=(
             "Repeatable or "
             "comma-separated"
+        ),
+    ),
+
+    platform: Optional[
+        str
+    ] = Query(
+        default=None,
+        regex=(
+            "^(android|iphone|unknown)$"
+        ),
+        description=(
+            "Response platform"
         ),
     ),
 
@@ -1481,6 +1578,9 @@ def list_study_responses_labeled(
 
             module_id=
                 module_id,
+
+            platform=
+                platform,
 
             from_=
                 from_,
@@ -1732,6 +1832,18 @@ def export_study_responses(
         ),
     ),
 
+    platform: Optional[
+        str
+    ] = Query(
+        default=None,
+        regex=(
+            "^(android|iphone|unknown)$"
+        ),
+        description=(
+            "Response platform"
+        ),
+    ),
+
     from_: Optional[
         str
     ] = Query(
@@ -1794,6 +1906,9 @@ def export_study_responses(
 
             module_id=
                 module_id,
+
+            platform=
+                platform,
 
             from_=
                 from_,

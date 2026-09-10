@@ -1,14 +1,8 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import {
-  useAuth,
-} from "@/app/context/AuthContext";
+import { useAuth } from "@/app/context/AuthContext";
 
 import {
   fetchParticipantEvents,
@@ -16,14 +10,9 @@ import {
   TrackingEvent,
 } from "@/app/lib/events";
 
-import {
-  fetchLabeledResponses,
-  StudyQuestion,
-} from "@/app/lib/responses";
+import { fetchLabeledResponses } from "@/app/lib/responses";
 
-import {
-  LabeledSurveyResponseOut,
-} from "@/app/types/schemas";
+import { LabeledSurveyResponseOut } from "@/app/types/schemas";
 
 import EventDetail, {
   ExtendedEventProps,
@@ -33,61 +22,28 @@ import styles from "./EventTimeline.module.css";
 
 type Props = {
   studyId: string;
-
-  rows:
-    LabeledSurveyResponseOut[];
-
-  questions?: StudyQuestion[];
-
+  rows: LabeledSurveyResponseOut[];
   userIds?: string[];
-
   moduleIds?: string[];
-
   from?: string;
-
   to?: string;
-
-  mapping?: Record<
-    string,
-    string
-  >;
-
+  mapping?: Record<string, string>;
   mappingName?: string;
 };
 
 type NotificationEntry = {
-  notification_id?:
-    | number
-    | string;
-
-  task_id?:
-    | string
-    | null;
-
-  module_id?:
-    | string
-    | null;
-
-  module_name?:
-    | string
-    | null;
-
-  task_type?:
-    | string
-    | null;
-
-  scheduled_at?:
-    | string
-    | null;
+  notification_id?: number | string;
+  task_id?: string | null;
+  module_id?: string | null;
+  module_name?: string | null;
+  task_type?: string | null;
+  scheduled_at?: string | null;
 };
 
 type SectionDuration = {
   section_index?: number;
-
   section_id?: string;
-
   section_name?: string;
-
   duration_ms?: number;
 };
 
@@ -98,21 +54,14 @@ type NotificationCollectionKey =
 
 function metadata(
   event: TrackingEvent,
-): Record<
-  string,
-  unknown
-> {
-  return (
-    event.metadata ??
-    {}
-  );
+): Record<string, unknown> {
+  return event.metadata ?? {};
 }
 
 function stringValue(
   value: unknown,
 ): string | null {
-  return typeof value ===
-    "string"
+  return typeof value === "string"
     ? value
     : null;
 }
@@ -120,73 +69,40 @@ function stringValue(
 function numberValue(
   value: unknown,
 ): number | null {
-  return (
-    typeof value ===
-      "number" &&
-    Number.isFinite(
-      value,
-    )
-  )
+  return typeof value === "number" &&
+    Number.isFinite(value)
     ? value
     : null;
 }
 
 function formatTimestamp(
   value: string,
-  timezone?:
-    | string
-    | null,
+  timezone?: string | null,
 ): string {
-  const date =
-    new Date(
-      value,
-    );
+  const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  const options:
-    Intl.DateTimeFormatOptions =
-    {
-      year:
-        "numeric",
+  const options: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  };
 
-      month:
-        "short",
-
-      day:
-        "2-digit",
-
-      hour:
-        "2-digit",
-
-      minute:
-        "2-digit",
-
-      second:
-        "2-digit",
-    };
-
-  if (
-    timezone
-  ) {
+  if (timezone) {
     try {
       return new Intl.DateTimeFormat(
         undefined,
         {
           ...options,
-
-          timeZone:
-            timezone,
+          timeZone: timezone,
         },
-      ).format(
-        date,
-      );
+      ).format(date);
     } catch {
       // Fall back to the dashboard/browser timezone if the event timezone is invalid.
     }
@@ -195,75 +111,47 @@ function formatTimestamp(
   return new Intl.DateTimeFormat(
     undefined,
     options,
-  ).format(
-    date,
-  );
+  ).format(date);
 }
 
 function formatDuration(
-  milliseconds:
-    | number
-    | null,
+  milliseconds: number | null,
 ): string {
   if (
-    milliseconds ===
-      null ||
-    milliseconds <
-      0
+    milliseconds === null ||
+    milliseconds < 0
   ) {
     return "—";
   }
 
-  if (
-    milliseconds <
-    1000
-  ) {
-    return `${Math.round(
-      milliseconds,
-    )} ms`;
+  if (milliseconds < 1000) {
+    return `${Math.round(milliseconds)} ms`;
   }
 
   const totalSeconds =
-    Math.round(
-      milliseconds /
-        1000,
-    );
+    Math.round(milliseconds / 1000);
 
-  if (
-    totalSeconds <
-    60
-  ) {
+  if (totalSeconds < 60) {
     return `${totalSeconds} s`;
   }
 
   const minutes =
-    Math.floor(
-      totalSeconds /
-        60,
-    );
+    Math.floor(totalSeconds / 60);
 
   const seconds =
-    totalSeconds %
-    60;
+    totalSeconds % 60;
 
-  if (
-    minutes <
-    60
-  ) {
+  if (minutes < 60) {
     return seconds
       ? `${minutes}m ${seconds}s`
       : `${minutes}m`;
   }
 
   const hours =
-    Math.floor(
-      minutes /
-        60,
-    );
+    Math.floor(minutes / 60);
 
   const remainingMinutes =
-    minutes %
-    60;
+    minutes % 60;
 
   return remainingMinutes
     ? `${hours}h ${remainingMinutes}m`
@@ -271,12 +159,9 @@ function formatDuration(
 }
 
 function humanizeEventType(
-  eventType:
-    TrackingEvent["event_type"],
+  eventType: TrackingEvent["event_type"],
 ): string {
-  switch (
-    eventType
-  ) {
+  switch (eventType) {
     case "enrolled":
       return "Enrolled";
 
@@ -312,9 +197,7 @@ function humanizeEventType(
 function humanizeReason(
   value: string,
 ): string {
-  switch (
-    value
-  ) {
+  switch (value) {
     case "enrollment":
       return "Study enrollment";
 
@@ -344,15 +227,10 @@ function humanizeReason(
 
     default:
       return value
-        .replaceAll(
-          "_",
-          " ",
-        )
+        .replaceAll("_", " ")
         .replace(
           /^./,
-          (
-            character,
-          ) =>
+          (character) =>
             character.toUpperCase(),
         );
   }
@@ -361,9 +239,7 @@ function humanizeReason(
 function humanizeQueueStatus(
   value: string,
 ): string {
-  switch (
-    value
-  ) {
+  switch (value) {
     case "scheduled":
       return "Scheduled";
 
@@ -375,27 +251,19 @@ function humanizeQueueStatus(
 
     default:
       return value
-        .replaceAll(
-          "_",
-          " ",
-        )
+        .replaceAll("_", " ")
         .replace(
           /^./,
-          (
-            character,
-          ) =>
+          (character) =>
             character.toUpperCase(),
         );
   }
 }
 
 function eventSymbol(
-  eventType:
-    TrackingEvent["event_type"],
+  eventType: TrackingEvent["event_type"],
 ): string {
-  switch (
-    eventType
-  ) {
+  switch (eventType) {
     case "enrolled":
       return "✓";
 
@@ -429,18 +297,13 @@ function eventSymbol(
 }
 
 function moduleName(
-  event:
-    TrackingEvent,
+  event: TrackingEvent,
 ): string | null {
   const meta =
-    metadata(
-      event,
-    );
+    metadata(event);
 
   return (
-    stringValue(
-      meta.module_name,
-    ) ??
+    stringValue(meta.module_name) ??
     event.module_id ??
     null
   );
@@ -451,25 +314,17 @@ function isNotificationEntry(
 ): value is NotificationEntry {
   return Boolean(
     value &&
-      typeof value ===
-        "object",
+      typeof value === "object",
   );
 }
 
 function getNotifications(
-  event:
-    TrackingEvent,
+  event: TrackingEvent,
 ): NotificationEntry[] {
   const value =
-    metadata(
-      event,
-    ).notifications;
+    metadata(event).notifications;
 
-  if (
-    !Array.isArray(
-      value,
-    )
-  ) {
+  if (!Array.isArray(value)) {
     return [];
   }
 
@@ -479,23 +334,13 @@ function getNotifications(
 }
 
 function getNotificationEntries(
-  event:
-    TrackingEvent,
-  key:
-    NotificationCollectionKey,
+  event: TrackingEvent,
+  key: NotificationCollectionKey,
 ): NotificationEntry[] {
   const value =
-    metadata(
-      event,
-    )[
-      key
-    ];
+    metadata(event)[key];
 
-  if (
-    !Array.isArray(
-      value,
-    )
-  ) {
+  if (!Array.isArray(value)) {
     return [];
   }
 
@@ -505,20 +350,13 @@ function getNotificationEntries(
 }
 
 function getSections(
-  event:
-    TrackingEvent,
+  event: TrackingEvent,
 ): SectionDuration[] {
   const value =
-    metadata(
-      event,
-    )
+    metadata(event)
       .section_durations;
 
-  if (
-    !Array.isArray(
-      value,
-    )
-  ) {
+  if (!Array.isArray(value)) {
     return [];
   }
 
@@ -528,17 +366,14 @@ function getSections(
     ): entry is SectionDuration =>
       Boolean(
         entry &&
-          typeof entry ===
-            "object",
+          typeof entry === "object",
       ),
   );
 }
 
 function notificationMatchesModules(
-  notification:
-    NotificationEntry,
-  moduleSet:
-    Set<string>,
+  notification: NotificationEntry,
+  moduleSet: Set<string>,
 ): boolean {
   return Boolean(
     notification.module_id &&
@@ -549,41 +384,29 @@ function notificationMatchesModules(
 }
 
 function queueEventMatchesModules(
-  event:
-    TrackingEvent,
-  moduleSet:
-    Set<string>,
+  event: TrackingEvent,
+  moduleSet: Set<string>,
 ): boolean {
-  const collections =
-    [
-      getNotifications(
-        event,
-      ),
-
-      getNotificationEntries(
-        event,
-        "added_notifications",
-      ),
-
-      getNotificationEntries(
-        event,
-        "removed_notifications",
-      ),
-
-      getNotificationEntries(
-        event,
-        "rescheduled_notifications",
-      ),
-    ];
+  const collections = [
+    getNotifications(event),
+    getNotificationEntries(
+      event,
+      "added_notifications",
+    ),
+    getNotificationEntries(
+      event,
+      "removed_notifications",
+    ),
+    getNotificationEntries(
+      event,
+      "rescheduled_notifications",
+    ),
+  ];
 
   return collections.some(
-    (
-      collection,
-    ) =>
+    (collection) =>
       collection.some(
-        (
-          notification,
-        ) =>
+        (notification) =>
           notificationMatchesModules(
             notification,
             moduleSet,
@@ -597,27 +420,18 @@ function NotificationList({
   notifications,
   emptyText,
 }: {
-  event:
-    TrackingEvent;
-
-  notifications:
-    NotificationEntry[];
-
-  emptyText?:
-    string;
+  event: TrackingEvent;
+  notifications: NotificationEntry[];
+  emptyText?: string;
 }) {
-  if (
-    !notifications.length
-  ) {
+  if (!notifications.length) {
     return emptyText ? (
       <div
         className={
           styles.emptySnapshot
         }
       >
-        {
-          emptyText
-        }
+        {emptyText}
       </div>
     ) : null;
   }
@@ -716,18 +530,11 @@ function NotificationChangeBlock({
   title,
   notifications,
 }: {
-  event:
-    TrackingEvent;
-
-  title:
-    string;
-
-  notifications:
-    NotificationEntry[];
+  event: TrackingEvent;
+  title: string;
+  notifications: NotificationEntry[];
 }) {
-  if (
-    !notifications.length
-  ) {
+  if (!notifications.length) {
     return null;
   }
 
@@ -742,15 +549,11 @@ function NotificationChangeBlock({
           styles.sectionTitle
         }
       >
-        {
-          title
-        }
+        {title}
       </div>
 
       <NotificationList
-        event={
-          event
-        }
+        event={event}
         notifications={
           notifications
         }
@@ -762,13 +565,10 @@ function NotificationChangeBlock({
 function EventDetails({
   event,
 }: {
-  event:
-    TrackingEvent;
+  event: TrackingEvent;
 }) {
   const meta =
-    metadata(
-      event,
-    );
+    metadata(event);
 
   const duration =
     numberValue(
@@ -809,14 +609,10 @@ function EventDetails({
     );
 
   const sections =
-    getSections(
-      event,
-    );
+    getSections(event);
 
   const notifications =
-    getNotifications(
-      event,
-    );
+    getNotifications(event);
 
   const pendingCount =
     numberValue(
@@ -858,14 +654,9 @@ function EventDetails({
             styles.detailRow
           }
         >
-          <span>
-            Task
-          </span>
-
+          <span>Task</span>
           <code>
-            {
-              event.task_id
-            }
+            {event.task_id}
           </code>
         </div>
       )}
@@ -876,14 +667,9 @@ function EventDetails({
             styles.detailRow
           }
         >
+          <span>Module</span>
           <span>
-            Module
-          </span>
-
-          <span>
-            {
-              readableModuleName
-            }
+            {readableModuleName}
           </span>
         </div>
       )}
@@ -894,14 +680,9 @@ function EventDetails({
             styles.detailRow
           }
         >
-          <span>
-            Module ID
-          </span>
-
+          <span>Module ID</span>
           <code>
-            {
-              event.module_id
-            }
+            {event.module_id}
           </code>
         </div>
       )}
@@ -912,14 +693,9 @@ function EventDetails({
             styles.detailRow
           }
         >
+          <span>Type</span>
           <span>
-            Type
-          </span>
-
-          <span>
-            {
-              taskType
-            }
+            {taskType}
           </span>
         </div>
       )}
@@ -930,10 +706,7 @@ function EventDetails({
             styles.detailRow
           }
         >
-          <span>
-            Scheduled
-          </span>
-
+          <span>Scheduled</span>
           <span>
             {formatTimestamp(
               scheduledAt,
@@ -943,17 +716,13 @@ function EventDetails({
         </div>
       )}
 
-      {duration !==
-        null && (
+      {duration !== null && (
         <div
           className={
             styles.detailRow
           }
         >
-          <span>
-            Duration
-          </span>
-
+          <span>Duration</span>
           <strong>
             {formatDuration(
               duration,
@@ -968,14 +737,9 @@ function EventDetails({
             styles.detailRow
           }
         >
+          <span>Platform</span>
           <span>
-            Platform
-          </span>
-
-          <span>
-            {
-              platform
-            }
+            {platform}
           </span>
         </div>
       )}
@@ -992,7 +756,6 @@ function EventDetails({
             <span>
               Notification ID
             </span>
-
             <code>
               {String(
                 notificationId,
@@ -1010,7 +773,6 @@ function EventDetails({
           <span>
             Queue refresh reason
           </span>
-
           <span>
             {humanizeReason(
               reason,
@@ -1028,7 +790,6 @@ function EventDetails({
           <span>
             Queue status
           </span>
-
           <span>
             {humanizeQueueStatus(
               status,
@@ -1037,8 +798,7 @@ function EventDetails({
         </div>
       )}
 
-      {sections.length >
-        0 && (
+      {sections.length > 0 && (
         <div
           className={
             styles.sectionBlock
@@ -1081,8 +841,7 @@ function EventDetails({
                         section.section_id ??
                         `Section ${
                           (section.section_index ??
-                            index) +
-                          1
+                            index) + 1
                         }`}
                     </div>
 
@@ -1143,9 +902,7 @@ function EventDetails({
           </div>
 
           <NotificationChangeBlock
-            event={
-              event
-            }
+            event={event}
             title="Added"
             notifications={
               addedNotifications
@@ -1153,9 +910,7 @@ function EventDetails({
           />
 
           <NotificationChangeBlock
-            event={
-              event
-            }
+            event={event}
             title="Removed"
             notifications={
               removedNotifications
@@ -1163,9 +918,7 @@ function EventDetails({
           />
 
           <NotificationChangeBlock
-            event={
-              event
-            }
+            event={event}
             title="Rescheduled"
             notifications={
               rescheduledNotifications
@@ -1186,9 +939,7 @@ function EventDetails({
             </div>
 
             <NotificationList
-              event={
-                event
-              }
+              event={event}
               notifications={
                 notifications
               }
@@ -1206,35 +957,23 @@ function TimelineEvent({
   onViewResponse,
   responseLoading,
 }: {
-  event:
-    TrackingEvent;
-
+  event: TrackingEvent;
   onViewResponse: (
-    event:
-      TrackingEvent,
+    event: TrackingEvent,
   ) => void;
-
-  responseLoading:
-    boolean;
+  responseLoading: boolean;
 }) {
-  const [
-    expanded,
-    setExpanded,
-  ] =
+  const [expanded, setExpanded] =
     useState(
       event.event_type ===
         "module_submitted",
     );
 
   const name =
-    moduleName(
-      event,
-    );
+    moduleName(event);
 
   const meta =
-    metadata(
-      event,
-    );
+    metadata(event);
 
   const duration =
     numberValue(
@@ -1242,9 +981,7 @@ function TimelineEvent({
     );
 
   const notifications =
-    getNotifications(
-      event,
-    );
+    getNotifications(event);
 
   const pendingCount =
     numberValue(
@@ -1280,8 +1017,7 @@ function TimelineEvent({
           className={`${styles.dot} ${
             styles[
               `dot_${event.event_type}`
-            ] ??
-            ""
+            ] ?? ""
           }`}
         >
           {eventSymbol(
@@ -1302,9 +1038,7 @@ function TimelineEvent({
           }
           onClick={() =>
             setExpanded(
-              (
-                current,
-              ) =>
+              (current) =>
                 !current,
             )
           }
@@ -1356,9 +1090,9 @@ function TimelineEvent({
                   null
                     ? `${previousPendingCount} → ${currentPendingCount} pending`
                     : currentPendingCount ===
-                        0
-                      ? "none pending"
-                      : `${currentPendingCount} pending`}
+                      0
+                    ? "none pending"
+                    : `${currentPendingCount} pending`}
                 </span>
               )}
             </div>
@@ -1369,9 +1103,7 @@ function TimelineEvent({
                   styles.moduleName
                 }
               >
-                {
-                  name
-                }
+                {name}
               </div>
             )}
 
@@ -1415,9 +1147,7 @@ function TimelineEvent({
 
         {expanded && (
           <EventDetails
-            event={
-              event
-            }
+            event={event}
           />
         )}
 
@@ -1461,34 +1191,18 @@ function DayGroup({
   defaultOpen,
 }: {
   group: {
-    key:
-      string;
-
-    label:
-      string;
-
-    events:
-      TrackingEvent[];
+    key: string;
+    label: string;
+    events: TrackingEvent[];
   };
-
   onViewResponse: (
-    event:
-      TrackingEvent,
+    event: TrackingEvent,
   ) => void;
-
-  responseLoading:
-    boolean;
-
-  defaultOpen:
-    boolean;
+  responseLoading: boolean;
+  defaultOpen: boolean;
 }) {
-  const [
-    open,
-    setOpen,
-  ] =
-    useState(
-      defaultOpen,
-    );
+  const [open, setOpen] =
+    useState(defaultOpen);
 
   return (
     <section
@@ -1503,23 +1217,15 @@ function DayGroup({
         }
         onClick={() =>
           setOpen(
-            (
-              current,
-            ) =>
+            (current) =>
               !current,
           )
         }
-        aria-expanded={
-          open
-        }
+        aria-expanded={open}
       >
         <span>
-          {open
-            ? "▼"
-            : "▶"}{" "}
-          {
-            group.label
-          }
+          {open ? "▼" : "▶"}{" "}
+          {group.label}
         </span>
 
         <span
@@ -1527,9 +1233,7 @@ function DayGroup({
             styles.dayCount
           }
         >
-          {
-            group.events.length
-          }
+          {group.events.length}
         </span>
       </button>
 
@@ -1540,17 +1244,13 @@ function DayGroup({
           }
         >
           {group.events.map(
-            (
-              event,
-            ) => (
+            (event) => (
               <TimelineEvent
                 key={
                   event._id ??
                   `${event.timestamp}-${event.event_type}-${event.task_id ?? ""}`
                 }
-                event={
-                  event
-                }
+                event={event}
                 responseLoading={
                   responseLoading
                 }
@@ -1567,8 +1267,7 @@ function DayGroup({
 }
 
 function getLocalDateKeyAndLabel(
-  event:
-    TrackingEvent,
+  event: TrackingEvent,
 ): {
   key: string;
   label: string;
@@ -1584,11 +1283,8 @@ function getLocalDateKeyAndLabel(
     )
   ) {
     return {
-      key:
-        "unknown",
-
-      label:
-        "Unknown date",
+      key: "unknown",
+      label: "Unknown date",
     };
   }
 
@@ -1597,116 +1293,74 @@ function getLocalDateKeyAndLabel(
       new Intl.DateTimeFormat(
         "en-CA",
         {
-          year:
-            "numeric",
-
-          month:
-            "2-digit",
-
-          day:
-            "2-digit",
-
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
           timeZone:
             event.timezone ||
             undefined,
         },
-      ).formatToParts(
-        date,
-      );
+      ).formatToParts(date);
 
-    const part =
-      (
-        type:
-          string,
-      ): string =>
-        dateParts.find(
-          (
-            item,
-          ) =>
-            item.type ===
-            type,
-        )?.value ??
-        "";
+    const part = (
+      type: string,
+    ): string =>
+      dateParts.find(
+        (item) =>
+          item.type ===
+          type,
+      )?.value ?? "";
 
     const key =
-      `${part(
-        "year",
-      )}-${part(
+      `${part("year")}-${part(
         "month",
-      )}-${part(
-        "day",
-      )}`;
+      )}-${part("day")}`;
 
     const label =
       new Intl.DateTimeFormat(
         undefined,
         {
-          weekday:
-            "long",
-
-          year:
-            "numeric",
-
-          month:
-            "long",
-
-          day:
-            "numeric",
-
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
           timeZone:
             event.timezone ||
             undefined,
         },
-      ).format(
-        date,
-      );
+      ).format(date);
 
     return {
       key,
       label,
     };
   } catch {
-    const key =
-      [
-        date.getFullYear(),
-
-        String(
-          date.getMonth() +
-            1,
-        ).padStart(
-          2,
-          "0",
-        ),
-
-        String(
-          date.getDate(),
-        ).padStart(
-          2,
-          "0",
-        ),
-      ].join(
-        "-",
-      );
+    const key = [
+      date.getFullYear(),
+      String(
+        date.getMonth() + 1,
+      ).padStart(
+        2,
+        "0",
+      ),
+      String(
+        date.getDate(),
+      ).padStart(
+        2,
+        "0",
+      ),
+    ].join("-");
 
     const label =
       new Intl.DateTimeFormat(
         undefined,
         {
-          weekday:
-            "long",
-
-          year:
-            "numeric",
-
-          month:
-            "long",
-
-          day:
-            "numeric",
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
         },
-      ).format(
-        date,
-      );
+      ).format(date);
 
     return {
       key,
@@ -1716,29 +1370,23 @@ function getLocalDateKeyAndLabel(
 }
 
 function groupByDate(
-  events:
-    TrackingEvent[],
+  events: TrackingEvent[],
 ): Array<{
   key: string;
   label: string;
-  events:
-    TrackingEvent[];
+  events: TrackingEvent[];
 }> {
   const groups =
     new Map<
       string,
       {
-        label:
-          string;
-
-        events:
-          TrackingEvent[];
+        label: string;
+        events: TrackingEvent[];
       }
     >();
 
   for (
-    const event of
-    events
+    const event of events
   ) {
     const {
       key,
@@ -1749,13 +1397,9 @@ function groupByDate(
       );
 
     const existing =
-      groups.get(
-        key,
-      );
+      groups.get(key);
 
-    if (
-      existing
-    ) {
+    if (existing) {
       existing.events.push(
         event,
       );
@@ -1764,10 +1408,7 @@ function groupByDate(
         key,
         {
           label,
-
-          events: [
-            event,
-          ],
+          events: [event],
         },
       );
     }
@@ -1776,17 +1417,10 @@ function groupByDate(
   return Array.from(
     groups.entries(),
   ).map(
-    (
-      [
-        key,
-        value,
-      ],
-    ) => ({
+    ([key, value]) => ({
       key,
-
       label:
         value.label,
-
       events:
         value.events,
     }),
@@ -1794,8 +1428,7 @@ function groupByDate(
 }
 
 function responseTimestamp(
-  response:
-    LabeledSurveyResponseOut,
+  response: LabeledSurveyResponseOut,
 ): number | null {
   const timestamp =
     new Date(
@@ -1810,19 +1443,14 @@ function responseTimestamp(
 }
 
 function findClosestResponse(
-  responses:
-    LabeledSurveyResponseOut[],
-  eventTime:
-    number,
+  responses: LabeledSurveyResponseOut[],
+  eventTime: number,
 ): LabeledSurveyResponseOut | null {
   const valid =
     responses
       .map(
-        (
+        (response) => ({
           response,
-        ) => ({
-          response,
-
           timestamp:
             responseTimestamp(
               response,
@@ -1833,19 +1461,14 @@ function findClosestResponse(
         (
           item,
         ): item is {
-          response:
-            LabeledSurveyResponseOut;
-
-          timestamp:
-            number;
+          response: LabeledSurveyResponseOut;
+          timestamp: number;
         } =>
           item.timestamp !==
           null,
       );
 
-  if (
-    !valid.length
-  ) {
+  if (!valid.length) {
     return null;
   }
 
@@ -1877,7 +1500,6 @@ function findClosestResponse(
 export default function EventTimeline({
   studyId,
   rows,
-  questions = [],
   userIds,
   moduleIds,
   from,
@@ -1885,22 +1507,17 @@ export default function EventTimeline({
   mapping,
   mappingName,
 }: Props) {
-  const {
-    user,
-  } =
+  const { user } =
     useAuth();
 
   const canViewDiagnostics =
-    user?.role ===
-    "admin";
+    user?.role === "admin";
 
   const [
     showDiagnostics,
     setShowDiagnostics,
   ] =
-    useState(
-      false,
-    );
+    useState(false);
 
   /*
    * The backend independently enforces admin access. This flag only controls
@@ -1910,41 +1527,24 @@ export default function EventTimeline({
     canViewDiagnostics &&
     showDiagnostics;
 
-  const [
-    data,
-    setData,
-  ] =
+  const [data, setData] =
     useState<
       ParticipantEventsOut | null
-    >(
-      null,
-    );
+    >(null);
 
-  const [
-    loading,
-    setLoading,
-  ] =
-    useState(
-      false,
-    );
+  const [loading, setLoading] =
+    useState(false);
 
-  const [
-    error,
-    setError,
-  ] =
+  const [error, setError] =
     useState<
       string | null
-    >(
-      null,
-    );
+    >(null);
 
   const [
     detailOpen,
     setDetailOpen,
   ] =
-    useState(
-      false,
-    );
+    useState(false);
 
   const [
     detailData,
@@ -1952,17 +1552,13 @@ export default function EventTimeline({
   ] =
     useState<
       ExtendedEventProps | null
-    >(
-      null,
-    );
+    >(null);
 
   const [
     detailLoading,
     setDetailLoading,
   ] =
-    useState(
-      false,
-    );
+    useState(false);
 
   const [
     detailError,
@@ -1970,29 +1566,20 @@ export default function EventTimeline({
   ] =
     useState<
       string | null
-    >(
-      null,
-    );
+    >(null);
 
   const selectedUser =
-    userIds?.length ===
-    1
-      ? userIds[
-          0
-        ]
+    userIds?.length === 1
+      ? userIds[0]
       : null;
 
   async function openSubmittedResponse(
-    event:
-      TrackingEvent,
+    event: TrackingEvent,
   ): Promise<void> {
-    if (
-      !event.module_id
-    ) {
+    if (!event.module_id) {
       setDetailError(
         "This submission does not contain a module ID.",
       );
-
       return;
     }
 
@@ -2009,24 +1596,16 @@ export default function EventTimeline({
       setDetailError(
         "This submission has an invalid timestamp.",
       );
-
       return;
     }
 
-    setDetailLoading(
-      true,
-    );
-
-    setDetailError(
-      null,
-    );
+    setDetailLoading(true);
+    setDetailError(null);
 
     try {
       let candidates =
         rows.filter(
-          (
-            response,
-          ) =>
+          (response) =>
             response.user_id ===
               event.user_id &&
             response.module_id ===
@@ -2044,9 +1623,7 @@ export default function EventTimeline({
        * Fetch participant/module responses directly when the matching
        * submission is not present locally.
        */
-      if (
-        !response
-      ) {
+      if (!response) {
         candidates =
           await fetchLabeledResponses(
             studyId,
@@ -2054,19 +1631,12 @@ export default function EventTimeline({
               user_id: [
                 event.user_id,
               ],
-
               module_id: [
                 event.module_id,
               ],
-
-              sort:
-                "desc",
-
-              skip:
-                0,
-
-              limit:
-                500,
+              sort: "desc",
+              skip: 0,
+              limit: 500,
             },
           );
 
@@ -2077,20 +1647,16 @@ export default function EventTimeline({
           );
       }
 
-      if (
-        !response
-      ) {
+      if (!response) {
         throw new Error(
           "No response was found for this submission.",
         );
       }
 
-      const details:
-        Record<
-          string,
-          unknown
-        > =
-        {};
+      const details: Record<
+        string,
+        unknown
+      > = {};
 
       for (
         const answer of
@@ -2100,30 +1666,8 @@ export default function EventTimeline({
           answer.question_text ??
           answer.question_id;
 
-        details[
-          question
-        ] = {
-          questionId:
-            answer.question_id,
-
-          answers: [
-            answer.answer,
-          ],
-
-          responseTimes: [
-            String(
-              response.response_time,
-            ),
-          ],
-
-          alertTimes: [
-            response.alert_time
-              ? String(
-                  response.alert_time,
-                )
-              : null,
-          ],
-        };
+        details[question] =
+          answer.answer;
       }
 
       setDetailData({
@@ -2133,14 +1677,9 @@ export default function EventTimeline({
           ] ??
           event.user_id,
 
-        moduleId:
-          response.module_id,
-
         moduleName:
           response.module_name ??
-          moduleName(
-            event,
-          ) ??
+          moduleName(event) ??
           event.module_id,
 
         responseTime:
@@ -2150,16 +1689,12 @@ export default function EventTimeline({
 
         details,
 
-        type:
-          "structured",
+        type: "structured",
       });
 
-      setDetailOpen(
-        true,
-      );
+      setDetailOpen(true);
     } catch (
-      responseError:
-        unknown
+      responseError: unknown
     ) {
       console.error(
         "[EventTimeline] Failed to load submitted response",
@@ -2180,17 +1715,9 @@ export default function EventTimeline({
   }
 
   useEffect(() => {
-    if (
-      !selectedUser
-    ) {
-      setData(
-        null,
-      );
-
-      setError(
-        null,
-      );
-
+    if (!selectedUser) {
+      setData(null);
+      setError(null);
       return;
     }
 
@@ -2198,45 +1725,31 @@ export default function EventTimeline({
       false;
 
     async function loadEvents() {
-      setLoading(
-        true,
-      );
-
-      setError(
-        null,
-      );
+      setLoading(true);
+      setError(null);
 
       try {
         const result =
           await fetchParticipantEvents(
             {
               studyId,
-
               userId:
                 selectedUser,
-
               includeDiagnostics:
                 diagnosticsEnabled,
-
-              limit:
-                2000,
+              limit: 2000,
             },
           );
 
-        if (
-          !cancelled
-        ) {
+        if (!cancelled) {
           setData(
             result,
           );
         }
       } catch (
-        loadError:
-          unknown
+        loadError: unknown
       ) {
-        if (
-          !cancelled
-        ) {
+        if (!cancelled) {
           setError(
             loadError instanceof
               Error
@@ -2249,9 +1762,7 @@ export default function EventTimeline({
           );
         }
       } finally {
-        if (
-          !cancelled
-        ) {
+        if (!cancelled) {
           setLoading(
             false,
           );
@@ -2262,8 +1773,7 @@ export default function EventTimeline({
     void loadEvents();
 
     return () => {
-      cancelled =
-        true;
+      cancelled = true;
     };
   }, [
     studyId,
@@ -2272,110 +1782,99 @@ export default function EventTimeline({
   ]);
 
   const filteredEvents =
-    useMemo(
-      () => {
-        if (
-          !data
-        ) {
-          return [];
-        }
+    useMemo(() => {
+      if (!data) {
+        return [];
+      }
 
-        const fromMs =
-          from
-            ? new Date(
-                from,
-              ).getTime()
-            : null;
+      const fromMs =
+        from
+          ? new Date(
+              from,
+            ).getTime()
+          : null;
 
-        const toMs =
-          to
-            ? new Date(
-                to,
-              ).getTime()
-            : null;
+      const toMs =
+        to
+          ? new Date(
+              to,
+            ).getTime()
+          : null;
 
-        const moduleSet =
-          moduleIds?.length
-            ? new Set(
-                moduleIds,
-              )
-            : null;
+      const moduleSet =
+        moduleIds?.length
+          ? new Set(
+              moduleIds,
+            )
+          : null;
 
-        return data.events.filter(
-          (
-            event,
-          ) => {
-            const eventMs =
-              new Date(
-                event.timestamp,
-              ).getTime();
+      return data.events.filter(
+        (event) => {
+          const eventMs =
+            new Date(
+              event.timestamp,
+            ).getTime();
 
-            if (
-              fromMs !==
-                null &&
-              !Number.isNaN(
-                fromMs,
-              ) &&
-              !Number.isNaN(
-                eventMs,
-              ) &&
-              eventMs <
-                fromMs
-            ) {
-              return false;
-            }
-
-            if (
-              toMs !==
-                null &&
-              !Number.isNaN(
-                toMs,
-              ) &&
-              !Number.isNaN(
-                eventMs,
-              ) &&
-              eventMs >
-                toMs
-            ) {
-              return false;
-            }
-
-            if (
-              !moduleSet
-            ) {
-              return true;
-            }
-
-            if (
-              event.module_id &&
-              moduleSet.has(
-                event.module_id,
-              )
-            ) {
-              return true;
-            }
-
-            if (
-              event.event_type ===
-              "notification_scheduled"
-            ) {
-              return queueEventMatchesModules(
-                event,
-                moduleSet,
-              );
-            }
-
+          if (
+            fromMs !== null &&
+            !Number.isNaN(
+              fromMs,
+            ) &&
+            !Number.isNaN(
+              eventMs,
+            ) &&
+            eventMs <
+              fromMs
+          ) {
             return false;
-          },
-        );
-      },
-      [
-        data,
-        moduleIds,
-        from,
-        to,
-      ],
-    );
+          }
+
+          if (
+            toMs !== null &&
+            !Number.isNaN(
+              toMs,
+            ) &&
+            !Number.isNaN(
+              eventMs,
+            ) &&
+            eventMs >
+              toMs
+          ) {
+            return false;
+          }
+
+          if (!moduleSet) {
+            return true;
+          }
+
+          if (
+            event.module_id &&
+            moduleSet.has(
+              event.module_id,
+            )
+          ) {
+            return true;
+          }
+
+          if (
+            event.event_type ===
+            "notification_scheduled"
+          ) {
+            return queueEventMatchesModules(
+              event,
+              moduleSet,
+            );
+          }
+
+          return false;
+        },
+      );
+    }, [
+      data,
+      moduleIds,
+      from,
+      to,
+    ]);
 
   const groups =
     useMemo(
@@ -2383,30 +1882,25 @@ export default function EventTimeline({
         groupByDate(
           filteredEvents,
         ),
-      [
-        filteredEvents,
-      ],
+      [filteredEvents],
     );
 
-  if (
-    !userIds?.length
-  ) {
+  if (!userIds?.length) {
     return (
       <div
         className={
           styles.messageCard
         }
       >
-        Select one participant
-        to view their activity
+        Select one participant to
+        view their activity
         timeline.
       </div>
     );
   }
 
   if (
-    userIds.length >
-    1
+    userIds.length > 1
   ) {
     return (
       <div
@@ -2414,16 +1908,13 @@ export default function EventTimeline({
           styles.messageCard
         }
       >
-        Select a single
-        participant to view
-        the event timeline.
+        Select a single participant
+        to view the event timeline.
       </div>
     );
   }
 
-  if (
-    loading
-  ) {
+  if (loading) {
     return (
       <div
         className={
@@ -2435,16 +1926,12 @@ export default function EventTimeline({
     );
   }
 
-  if (
-    error
-  ) {
+  if (error) {
     return (
       <div
         className={`${styles.messageCard} ${styles.error}`}
       >
-        {
-          error
-        }
+        {error}
       </div>
     );
   }
@@ -2552,15 +2039,13 @@ export default function EventTimeline({
           </strong>
 
           <span>
-            Diagnostic events
-            include best-effort
-            mobile and
-            operating-system
-            telemetry. Missing
-            notification delivery
-            events do not mean
-            that a notification
-            was not delivered.
+            Diagnostic events include
+            best-effort mobile and
+            operating-system telemetry.
+            Missing notification delivery
+            events do not mean that a
+            notification was not
+            delivered.
           </span>
         </div>
       )}
@@ -2571,9 +2056,8 @@ export default function EventTimeline({
             styles.messageCard
           }
         >
-          No tracked events
-          match the selected
-          filters.
+          No tracked events match
+          the selected filters.
         </div>
       ) : (
         <div
@@ -2594,8 +2078,7 @@ export default function EventTimeline({
                   group
                 }
                 defaultOpen={
-                  index ===
-                  0
+                  index === 0
                 }
                 responseLoading={
                   detailLoading
@@ -2619,9 +2102,7 @@ export default function EventTimeline({
             styles.responseError
           }
         >
-          {
-            detailError
-          }
+          {detailError}
         </div>
       )}
 
@@ -2644,9 +2125,6 @@ export default function EventTimeline({
         }}
         eventData={
           detailData
-        }
-        questions={
-          questions
         }
       />
     </section>

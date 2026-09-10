@@ -20,7 +20,6 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      data-lt-installed="true"
     >
       <body>
         <AuthProvider>

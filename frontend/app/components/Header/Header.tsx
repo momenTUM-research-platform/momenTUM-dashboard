@@ -92,7 +92,7 @@ export default function Header() {
             }
           >
             <Image
-              src="/icon.png"
+              src="/momentum-icon.png"
               alt=""
               width={32}
               height={32}
