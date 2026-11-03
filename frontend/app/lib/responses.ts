@@ -1,3 +1,4 @@
+import { getAccessToken } from "./auth";
 import {
   LabeledSurveyResponseOut,
 } from "@/app/types/schemas";
@@ -238,9 +239,7 @@ function getTokenFromStorage():
   }
 
   const token =
-    window.localStorage.getItem(
-      "token",
-    ) ?? undefined;
+    getAccessToken() ?? undefined;
 
   return token &&
     token.trim().length > 0

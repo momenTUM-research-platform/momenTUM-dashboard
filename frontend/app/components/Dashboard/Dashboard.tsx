@@ -1,5 +1,7 @@
 "use client";
 
+import { getAccessToken } from "@/app/lib/auth";
+
 import Link from "next/link";
 import {
   useEffect,
@@ -81,9 +83,7 @@ const Dashboard: React.FC<
 
   useEffect(() => {
     const storedToken =
-      localStorage.getItem(
-        "token"
-      );
+      getAccessToken();
 
     if (storedToken) {
       setToken(storedToken);

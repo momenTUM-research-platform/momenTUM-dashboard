@@ -7,7 +7,7 @@ from fastapi import Body, Depends, FastAPI, HTTPException
 from pymongo import MongoClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth import get_current_user, router as auth_router
+from auth import get_current_user, admin_required, require_study_access, router as auth_router
 from database import get_db
 from models import User
 from partial_search import router as partial_search_studies
@@ -166,12 +166,12 @@ async def get_dashboard_data(
 
 @app.get("/api/studies")
 def get_all_studies(
-    _user: User = Depends(
+    user: User = Depends(
         get_current_user
     ),
 ):
     documents = studies_collection.find(
-        {},
+        {} if user.role == "admin" else {"properties.study_id": {"$in": user.studies or []}},
         projection={
             "_id": 0,
             "properties.study_id": 1,
@@ -223,7 +223,7 @@ def get_all_studies(
 def get_study_metadata(
     study_id: str,
     _user: User = Depends(
-        get_current_user
+        require_study_access
     ),
 ):
     summary = _find_study_summary(
@@ -249,7 +249,7 @@ async def add_user_studies(
         embed=True,
     ),
     user: User = Depends(
-        get_current_user
+        admin_required
     ),
     db: AsyncSession = Depends(
         get_db
@@ -283,7 +283,7 @@ async def delete_user_study(
         embed=True,
     ),
     user: User = Depends(
-        get_current_user
+        admin_required
     ),
     db: AsyncSession = Depends(
         get_db

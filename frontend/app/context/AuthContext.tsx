@@ -1,6 +1,9 @@
 "use client";
 
+import { getAccessToken } from "@/app/lib/auth";
+
 import {
+  Fragment,
   createContext,
   useContext,
   useEffect,
@@ -14,6 +17,8 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   logout: () => void;
   loading: boolean;
+  startPreview: (userId: number) => Promise<void>;
+  endPreview: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,10 +27,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Use useCallback so that refreshUser is stable between renders.
   const refreshUser = useCallback(async () => {
     const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      typeof window !== "undefined" ? getAccessToken() : null;
     if (!token) {
       setUser(null);
       setLoading(false);
@@ -33,9 +37,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const res = await fetch("/api/auth/me", {
+      let res = await fetch("/api/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (res.status === 401 && sessionStorage.getItem("previewToken")) {
+        sessionStorage.removeItem("previewToken");
+        res = await fetch("/api/auth/me", {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+      }
       if (!res.ok) throw new Error("Unauthorized");
 
       const data = await res.json();
@@ -47,7 +57,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Call refreshUser once on mount.
   useEffect(() => {
     refreshUser();
   }, [refreshUser]);
@@ -55,13 +64,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     if (typeof window !== "undefined") {
       localStorage.removeItem("token");
+      sessionStorage.removeItem("previewToken");
     }
     setUser(null);
   };
 
+  const startPreview = async (userId: number) => {
+    const response = await fetch(`/api/auth/users/${userId}/preview`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || "Could not start preview");
+    }
+    const data = await response.json();
+    sessionStorage.setItem("previewToken", data.access_token);
+    await refreshUser();
+  };
+
+  const endPreview = async () => {
+    try {
+      await fetch("/api/auth/preview/end", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAccessToken()}` },
+      });
+    } finally {
+      sessionStorage.removeItem("previewToken");
+      await refreshUser();
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, refreshUser, logout, loading }}>
-      {children}
+    <AuthContext.Provider value={{ user, refreshUser, logout, loading, startPreview, endPreview }}>
+      <Fragment key={`${user?.id ?? "anonymous"}:${user?.preview?.audit_id ?? "self"}`}>
+        {children}
+      </Fragment>
     </AuthContext.Provider>
   );
 }

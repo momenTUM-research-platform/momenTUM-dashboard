@@ -1,5 +1,7 @@
 "use client";
 
+import { getAccessToken } from "@/app/lib/auth";
+
 import {
   useEffect,
   useState,
@@ -64,9 +66,7 @@ export default function RetrieveStudyPage() {
       "undefined"
     ) {
       setToken(
-        localStorage.getItem(
-          "token",
-        ),
+        getAccessToken(),
       );
     }
   }, []);
@@ -90,6 +90,7 @@ export default function RetrieveStudyPage() {
             `/api/studies_suggestions?query=${encodeURIComponent(
               studyQuery.trim(),
             )}`,
+            { headers: { Authorization: `Bearer ${getAccessToken()}` } },
           )
             .then(
               (response) => {

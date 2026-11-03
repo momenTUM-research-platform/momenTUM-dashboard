@@ -50,11 +50,12 @@ export default function LoginPage() {
       <h1>Login</h1>
       <form onSubmit={handleSubmit} className="form-login">
         <label>Username</label>
-        <input value={username} onChange={(e) => setUsername(e.target.value)} required />
+        <input name="username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
         <label>Password</label>
-        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <PasswordInput name="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <button type="submit" className="button">Login</button>
       </form>
+      <p>Contact your administrator if you need a password reset.</p>
       {error && <p className="error">{error}</p>}
     </div>
   );

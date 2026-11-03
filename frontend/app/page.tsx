@@ -1,5 +1,7 @@
 "use client";
 
+import { getAccessToken } from "@/app/lib/auth";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./context/AuthContext";
@@ -14,7 +16,7 @@ export default function DefaultPage() {
   // Fetch dashboard data only when the user is set.
   useEffect(() => {
     if (user) {
-      const token = localStorage.getItem("token");
+      const token = getAccessToken();
       if (!token) return;
 
       const fetchDashboard = async () => {

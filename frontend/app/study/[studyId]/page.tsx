@@ -1,5 +1,7 @@
 "use client";
 
+import { getAccessToken } from "@/app/lib/auth";
+
 import {
   useEffect,
   useState,
@@ -42,9 +44,7 @@ export default function StudyDetailsPage() {
     }
 
     const token =
-      localStorage.getItem(
-        "token"
-      );
+      getAccessToken();
 
     const controller =
       new AbortController();

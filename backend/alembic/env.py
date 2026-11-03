@@ -51,7 +51,7 @@ async def run_migrations_online():
     connectable = create_async_engine(
         config.get_main_option("sqlalchemy.url"),
         poolclass=pool.NullPool,
-        echo=True
+        echo=False
     )
 
     async with connectable.connect() as connection:

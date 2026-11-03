@@ -19,6 +19,7 @@ export default function Header() {
   const {
     user,
     logout,
+    endPreview,
   } = useAuth();
 
   const router =
@@ -75,6 +76,21 @@ export default function Header() {
         styles.header
       }
     >
+      {user?.preview && (
+        <div className={styles.previewBanner} role="status">
+          <span>Viewing as {displayName}. Read-only access.</span>
+          <button type="button" onClick={async () => {
+            await endPreview();
+            router.push("/admin");
+          }}>Exit preview</button>
+        </div>
+      )}
+      {!user && typeof window !== "undefined" && sessionStorage.getItem("previewToken") && (
+        <button type="button" onClick={async () => {
+          await endPreview();
+          router.push("/admin");
+        }}>Return to administrator account</button>
+      )}
       <div
         className={
           styles.inner

@@ -1,3 +1,4 @@
+import { getAccessToken } from "./auth";
 export type OccurrenceOut = {
   module_id: string;
   module_name: string;
@@ -85,9 +86,7 @@ function getTokenFromStorage():
   }
 
   const token =
-    window.localStorage.getItem(
-      "token",
-    ) ?? undefined;
+    getAccessToken() ?? undefined;
 
   if (
     !token ||

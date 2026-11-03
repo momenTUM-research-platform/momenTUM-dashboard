@@ -1,7 +1,9 @@
+from auth import require_study_access
+from models import User
 import json
 import os
 import re
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pymongo import MongoClient
 
 router = APIRouter()
@@ -21,7 +23,7 @@ db = client[MONGO_DB]
 collection = db["responses"]
 
 @router.get("/study-id={study_id}")
-def get_study_responses(study_id: str):
+def get_study_responses(study_id: str, _user: User = Depends(require_study_access)):
     """
     Retrieve and render all responses for a given study_id.
     Searches for documents where the "raw" field contains the study_id,
@@ -29,7 +31,7 @@ def get_study_responses(study_id: str):
     """
     try:
         # regex that matches the substring: "study_id":"<study_id>"
-        pattern = rf'"study_id":"{study_id}"'
+        pattern = rf'"study_id":"{re.escape(study_id)}"'
         regex = re.compile(pattern)
         query = {"raw": {"$regex": regex}}
         docs = list(collection.find(query))

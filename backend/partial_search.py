@@ -1,6 +1,8 @@
+from auth import get_current_user
+from models import User
 import os
 import re
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pymongo import MongoClient
 from bson import ObjectId
 
@@ -18,17 +20,18 @@ studies_collection = db["studies"]
 
 router = APIRouter()
 @router.get("/studies_suggestions")
-def get_studies_suggestions(query: str):
+def get_studies_suggestions(query: str, user: User = Depends(get_current_user)):
     try:
         # Build a case-insensitive regex for partial matching
-        regex = re.compile(query, re.IGNORECASE)
+        regex = re.compile(re.escape(query[:100]), re.IGNORECASE)
         # Search both the study_id and the study name inside properties
-        suggestions = list(studies_collection.find(
-            {"$or": [
+        filters = {"$or": [
                 {"properties.study_id": regex},
                 {"properties.name": regex}
             ]}
-        ))
+        if user.role != "admin":
+            filters["properties.study_id"] = {"$in": user.studies or []}
+        suggestions = list(studies_collection.find(filters).limit(50))
         # Return a simple list with study_id and name for suggestions
         suggestions = [
             {"study_id": s.get("properties", {}).get("study_id"), "name": s.get("properties", {}).get("study_name")}

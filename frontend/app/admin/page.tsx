@@ -1,5 +1,8 @@
 "use client";
 
+import { getAccessToken } from "@/app/lib/auth";
+import { formatInvitationExpiry, invitationEmail } from "@/app/lib/invitation";
+
 import {
   FormEvent,
   useCallback,
@@ -21,6 +24,21 @@ type UserRow = {
   email: string;
   role: string;
   studies?: string[] | null;
+  is_active: boolean;
+  password_set: boolean;
+};
+
+type SetupLink = {
+  user: UserRow;
+  url: string;
+  expiresAt: string;
+  purpose: "invite" | "reset";
+};
+
+type InvitationResult = {
+  user: UserRow;
+  setup_path: string;
+  expires_at: string;
 };
 
 type ApiError = {
@@ -32,7 +50,7 @@ function getToken(): string | null {
     return null;
   }
 
-  return localStorage.getItem("token");
+  return getAccessToken();
 }
 
 async function apiJson(
@@ -95,6 +113,7 @@ export default function AdminPanel() {
   const {
     user,
     refreshUser,
+    startPreview,
     loading,
   } = useAuth();
 
@@ -130,10 +149,11 @@ export default function AdminPanel() {
     setNewUsername,
   ] = useState("");
 
-  const [
-    newPassword,
-    setNewPassword,
-  ] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [useSetupLink, setUseSetupLink] = useState(true);
+  const [setupLink, setSetupLink] = useState<SetupLink | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkMessage, setLinkMessage] = useState("");
 
   const [
     newName,
@@ -246,6 +266,7 @@ export default function AdminPanel() {
   }, [
     router,
     refreshUser,
+    startPreview,
   ]);
 
   useEffect(() => {
@@ -336,6 +357,78 @@ export default function AdminPanel() {
     fetchUsers,
   ]);
 
+  const showSetupLink = (result: InvitationResult, purpose: "invite" | "reset") => {
+    setSetupLink({ user: result.user, url: new URL(result.setup_path, window.location.origin).href,
+      expiresAt: result.expires_at, purpose });
+    setLinkMessage("");
+  };
+
+  const prepareLink = async (target: UserRow, replace = false) => {
+    if (setupLink?.user.id === target.id && !replace && Date.parse(setupLink.expiresAt) > Date.now()) {
+      document.getElementById("setup-link-panel")?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    if (!window.confirm(`Create a ${target.password_set ? "password reset" : "setup"} link for ${target.username}? Previous links for this account will stop working.`)) return;
+    setLinkBusy(true);
+    setUsersError("");
+    try {
+      const result = await apiJson(`/api/auth/users/${target.id}/${target.password_set ? "reset-invitation" : "invitation"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ delivery: "link" }),
+      }) as InvitationResult;
+      showSetupLink(result, target.password_set ? "reset" : "invite");
+    } catch (error) {
+      setUsersError(error instanceof Error ? error.message : "Could not create link.");
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  const copySetupLink = async () => {
+    if (!setupLink) return;
+    if (Date.parse(setupLink.expiresAt) <= Date.now()) {
+      setLinkMessage("This link has expired. Generate a replacement.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(setupLink.url);
+      setLinkMessage("Link copied.");
+    } catch {
+      setLinkMessage("Select the link below and copy it manually.");
+      const input = document.getElementById("setup-link") as HTMLInputElement | null;
+      input?.focus();
+      input?.select();
+    }
+  };
+
+  const accountAction = async (target: UserRow) => {
+    if (!window.confirm(`${target.is_active ? "Suspend" : "Reactivate"} ${target.username}?`)) return;
+    setUsersError("");
+    setCreateSuccess("");
+    try {
+      await apiJson(`/api/auth/users/${target.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ is_active: !target.is_active }),
+      });
+      if (setupLink?.user.id === target.id) setSetupLink(null);
+      setCreateSuccess("Account status updated.");
+      await fetchUsers();
+    } catch (error) {
+      setUsersError(error instanceof Error ? error.message : "Account action failed.");
+    }
+  };
+
+  const previewUser = async (target: UserRow) => {
+    try {
+      await startPreview(target.id);
+      router.push("/");
+    } catch (error) {
+      setUsersError(error instanceof Error ? error.message : "Could not start preview.");
+    }
+  };
+
   const checkUsername =
     async () => {
       const username =
@@ -354,6 +447,7 @@ export default function AdminPanel() {
             `/api/auth/check-username?username=${encodeURIComponent(
               username,
             )}`,
+            { headers: { Authorization: `Bearer ${getToken()}` } },
           );
 
         if (!response.ok) {
@@ -393,15 +487,10 @@ export default function AdminPanel() {
 
       setCreateError("");
       setCreateSuccess("");
+      setSetupLink(null);
 
-      if (
-        !isPasswordValid(
-          newPassword,
-        )
-      ) {
-        setCreateError(
-          `Password must meet the following requirements: ${PASSWORD_HELP}`,
-        );
+      if (!useSetupLink && !isPasswordValid(newPassword)) {
+        setCreateError(PASSWORD_HELP);
         return;
       }
 
@@ -429,7 +518,7 @@ export default function AdminPanel() {
       try {
         const response =
           await fetch(
-            "/api/auth/create-user",
+            useSetupLink ? "/api/auth/invite-user" : "/api/auth/create-user",
             {
               method:
                 "POST",
@@ -443,8 +532,7 @@ export default function AdminPanel() {
                 {
                   username:
                     newUsername.trim(),
-                  password:
-                    newPassword,
+                  ...(useSetupLink ? { delivery: "link" } : { password: newPassword }),
                   name:
                     newName.trim(),
                   surname:
@@ -466,15 +554,20 @@ export default function AdminPanel() {
                 () => "",
               );
 
-          throw new Error(
-            text ||
-              "Failed to create user.",
-          );
+          let message = "Failed to create user.";
+          try {
+            const data = JSON.parse(text);
+            if (typeof data.detail === "string") message = data.detail;
+          } catch {
+            message = text || message;
+          }
+          throw new Error(message);
         }
 
-        setCreateSuccess(
-          `User ${newUsername.trim()} was created successfully.`,
-        );
+        if (useSetupLink) {
+          showSetupLink(await response.json() as InvitationResult, "invite");
+        }
+        setCreateSuccess(`User ${newUsername.trim()} created.`);
 
         setNewUsername("");
         setNewPassword("");
@@ -490,6 +583,7 @@ export default function AdminPanel() {
       } catch (
         error: unknown
       ) {
+        await fetchUsers();
         setCreateError(
           error instanceof
             Error
@@ -552,6 +646,7 @@ export default function AdminPanel() {
           return;
         }
 
+        setSetupLink(null);
         await fetchUsers();
       } catch (
         error
@@ -657,6 +752,7 @@ export default function AdminPanel() {
         }
 
         cancelEditing();
+        setSetupLink(null);
         await fetchUsers();
       } catch (
         error
@@ -970,6 +1066,19 @@ export default function AdminPanel() {
             handleCreateUser
           }
         >
+          <label className={styles.deliveryOption}>
+            <input type="checkbox" checked={useSetupLink}
+              onChange={event => setUseSetupLink(event.target.checked)} />
+            Let the user set their password using a setup link
+          </label>
+          {!useSetupLink && (
+            <div className={styles.formGroup}>
+              <label htmlFor="initial-password">Initial password</label>
+              <PasswordInput id="initial-password" autoComplete="new-password" required
+                value={newPassword} onChange={event => setNewPassword(event.target.value)} />
+              <p className={styles.fieldHint}>{PASSWORD_HELP}</p>
+            </div>
+          )}
           <div
             className={
               styles.formGrid
@@ -1021,40 +1130,6 @@ export default function AdminPanel() {
                   exists.
                 </p>
               )}
-            </div>
-
-            <div
-              className={
-                styles.formGroup
-              }
-            >
-              <label>
-                Password
-              </label>
-
-              <PasswordInput
-                value={
-                  newPassword
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setNewPassword(
-                    event.target
-                      .value,
-                  )
-                }
-                placeholder="Password"
-                required
-              />
-
-              <p
-                className={
-                  styles.fieldHint
-                }
-              >
-                {PASSWORD_HELP}
-              </p>
             </div>
 
             <div
@@ -1229,11 +1304,39 @@ export default function AdminPanel() {
             >
               {creatingUser
                 ? "Creating…"
-                : "Create user"}
+                : useSetupLink ? "Create user and setup link" : "Create user"}
             </button>
           </div>
         </form>
       </section>
+
+      {setupLink && (
+        <section id="setup-link-panel" className={styles.linkPanel} aria-labelledby="setup-link-title">
+          <h2 id="setup-link-title">{setupLink.purpose === "invite" ? "Account setup" : "Password reset"}: {setupLink.user.username}</h2>
+          <p>Recipient: {setupLink.user.email}</p>
+          <p>Single-use link. Expires {formatInvitationExpiry(setupLink.expiresAt)}.</p>
+          <div className={styles.linkActions}>
+            <button type="button" className={styles.primaryButton} onClick={() => void copySetupLink()}>Copy setup link</button>
+            <a className={styles.secondaryButton} href={invitationEmail(setupLink)}
+              onClick={event => {
+                if (Date.parse(setupLink.expiresAt) <= Date.now()) {
+                  event.preventDefault();
+                  setLinkMessage("This link has expired. Generate a replacement.");
+                }
+              }}>Open invitation email</a>
+          </div>
+          <p>Your default email app opens a draft. Choose the sender account and click Send.</p>
+          <label htmlFor="setup-link">Setup link</label>
+          <input id="setup-link" className={styles.inputField} readOnly value={setupLink.url}
+            autoComplete="off" spellCheck={false} onFocus={event => event.target.select()} />
+          <p role="status">{linkMessage}</p>
+          <div className={styles.linkActions}>
+            <button type="button" className={styles.textButton} disabled={linkBusy}
+              onClick={() => void prepareLink(setupLink.user, true)}>Generate replacement link</button>
+            <button type="button" className={styles.textButton} onClick={() => setSetupLink(null)}>Dismiss</button>
+          </div>
+        </section>
+      )}
 
       <section
         className={
@@ -1722,6 +1825,24 @@ export default function AdminPanel() {
                                 </button>
                               )}
 
+                              <span className={styles.accountStatus}>
+                                {!targetUser.is_active ? "Suspended" : targetUser.password_set ? "Active" : "Pending invitation"}
+                              </span>
+                              <button type="button" className={styles.textButton}
+                                disabled={!targetUser.is_active || linkBusy}
+                                onClick={() => void prepareLink(targetUser)}>
+                                {targetUser.password_set ? "Prepare reset link" : "Prepare setup link"}
+                              </button>
+                              {targetUser.id !== user.id && targetUser.username.toLowerCase() !== "admin" && (
+                                <button type="button" className={styles.textButton}
+                                  onClick={() => void accountAction(targetUser)}>
+                                  {targetUser.is_active ? "Suspend" : "Reactivate"}
+                                </button>
+                              )}
+                              {targetUser.role !== "admin" && targetUser.is_active && targetUser.password_set && (
+                                <button type="button" className={styles.textButton}
+                                  onClick={() => void previewUser(targetUser)}>View as user</button>
+                              )}
                               <button
                                 type="button"
                                 className={

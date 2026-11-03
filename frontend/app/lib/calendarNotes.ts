@@ -1,3 +1,4 @@
+import { getAccessToken } from "./auth";
 export type CalendarNote = {
     id: string;
   
@@ -23,9 +24,7 @@ export type CalendarNote = {
   
   function getAuthToken(): string {
     const token =
-      localStorage.getItem(
-        "token",
-      );
+      getAccessToken();
   
     if (!token) {
       throw new Error(

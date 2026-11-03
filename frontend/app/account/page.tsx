@@ -1,14 +1,15 @@
 "use client";
 
+import { getAccessToken } from "@/app/lib/auth";
+
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
-import ChangePasswordForm from "@/app/components/ChangePasswordForm/ChangePasswordForm";
 import styles from "./AccountPage.module.css";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
+  return getAccessToken();
 }
 
 export default function AccountPage() {
@@ -45,7 +46,7 @@ export default function AccountPage() {
 
       <div className={styles.card}>
         <h2 className={styles.subheader}>Change password</h2>
-        <ChangePasswordForm />
+        <p>Contact your administrator to change your password.</p>
       </div>
     </div>
   );

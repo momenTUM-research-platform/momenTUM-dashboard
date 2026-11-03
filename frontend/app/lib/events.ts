@@ -1,3 +1,4 @@
+import { getAccessToken } from "./auth";
 export type TrackingEvent = {
   _id?: string;
 
@@ -36,7 +37,7 @@ export type TrackingEvent = {
     if (typeof window === "undefined") return undefined;
   
     const token =
-      window.localStorage.getItem("token") ??
+      getAccessToken() ??
       undefined;
   
     return token && token.trim().length > 0

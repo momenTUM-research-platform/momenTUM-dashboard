@@ -209,3 +209,21 @@
     gap: 1rem;
   }
 }
+.previewBanner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: #fff3cd;
+  color: #493a12;
+}
+
+.previewBanner button {
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 0.4rem 0.8rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}

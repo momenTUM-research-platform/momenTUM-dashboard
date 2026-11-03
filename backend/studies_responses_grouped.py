@@ -1,7 +1,9 @@
+from auth import require_study_access
+from models import User
 import json
 import os
 import re
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pymongo import MongoClient
 from bson import ObjectId
 
@@ -28,10 +30,10 @@ def convert_object_ids(obj):
     return obj
 
 @router.get("/studies_responses_grouped/{study_id}")
-def get_grouped_study_responses(study_id: str):
+def get_grouped_study_responses(study_id: str, _user: User = Depends(require_study_access)):
     try:
         # Fetch responses
-        pattern = rf'"study_id":"{study_id}"'
+        pattern = rf'"study_id":"{re.escape(study_id)}"'
         regex = re.compile(pattern)
         query = {"$or": [{"raw": {"$regex": regex}}, {"study_id": study_id}]}
         response_docs = list(responses_collection.find(query))

@@ -622,3 +622,31 @@
     padding: 1rem;
   }
 }
+.accountStatus {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.deliveryOption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.linkPanel {
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.linkActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
