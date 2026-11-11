@@ -58,6 +58,47 @@ function metadata(
   return event.metadata ?? {};
 }
 
+function collapseVisibilityBursts(
+  events: TrackingEvent[],
+): TrackingEvent[] {
+  const firstVisibleByOccurrence = new Map<string, number>();
+
+  return events.filter((event) => {
+    if (
+      event.event_type !== "module_visible" ||
+      !event.task_id ||
+      !event.module_id
+    ) {
+      return true;
+    }
+
+    const timestamp = Date.parse(event.timestamp);
+    if (!Number.isFinite(timestamp)) {
+      return true;
+    }
+
+    const key = JSON.stringify([
+      event.study_id,
+      event.user_id,
+      event.task_id,
+      event.module_id,
+      metadata(event).scheduled_at ?? null,
+    ]);
+    const firstVisible = firstVisibleByOccurrence.get(key);
+
+    if (
+      firstVisible !== undefined &&
+      timestamp >= firstVisible &&
+      timestamp - firstVisible <= 1000
+    ) {
+      return false;
+    }
+
+    firstVisibleByOccurrence.set(key, timestamp);
+    return true;
+  });
+}
+
 function stringValue(
   value: unknown,
 ): string | null {
@@ -1808,7 +1849,7 @@ export default function EventTimeline({
             )
           : null;
 
-      return data.events.filter(
+      return collapseVisibilityBursts(data.events).filter(
         (event) => {
           const eventMs =
             new Date(
